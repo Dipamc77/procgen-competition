@@ -17,9 +17,9 @@ if [[ -z $AICROWD_IS_GRADING ]]; then
   ##########################################################################
 
   export OUTPUTS_DIR=./outputs
-  export RAY_MEMORY_LIMIT=4000000000
+  export RAY_MEMORY_LIMIT=40000000000
   export RAY_CPUS=8
-  export RAY_STORE_MEMORY=4000000000
+  export RAY_STORE_MEMORY=40000000000
 
   # Cleaning output directory between multiple runs
   rm -rf ${OUTPUTS_DIR}

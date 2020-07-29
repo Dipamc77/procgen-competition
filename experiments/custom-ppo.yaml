@@ -199,12 +199,12 @@ procgen-ppo:
         ################################################
         # Number of rollout worker actors to create for parallel sampling. Setting
         # this to 0 will force rollouts to be done in the trainer actor.
-        num_workers: 2
+        num_workers: 0
 
         # Number of environments to evaluate vectorwise per worker. This enables
         # model inference batching, which can improve performance for inference
         # bottlenecked workloads.
-        num_envs_per_worker: 32
+        num_envs_per_worker: 64
 
         # Divide episodes into fragments of this many steps each during rollouts.
         # Sample batches of this size are collected from rollout workers and
@@ -242,7 +242,7 @@ procgen-ppo:
         num_gpus_per_worker: 0.1
         # Number of CPUs to allocate for the trainer. Note: this only takes effect
         # when running in Tune. Otherwise, the trainer runs in the main program.
-        num_cpus_for_driver: 2
+        num_cpus_for_driver: 7
 
         ################################################
         ################################################
@@ -253,7 +253,7 @@ procgen-ppo:
         # algorithms can take advantage of trainer GPUs. This can be fractional
         # (e.g., 0.3 GPUs).
         # Note : If GPUs are not available, this will be overriden by the AIcrowd evaluators to 0.
-        num_gpus: 0.7
+        num_gpus: 0.9
 
         ################################################
         ################################################
