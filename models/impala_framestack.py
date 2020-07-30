@@ -41,19 +41,17 @@ class ImpalaFSCNN(TFModelV2):
     def __init__(self, obs_space, action_space, num_outputs, model_config, name):
         super().__init__(obs_space, action_space, num_outputs, model_config, name)
 
-        depths = [16, 32, 64]
+        depths = [32, 64, 64]
 
         inputs = tf.keras.layers.Input(shape=obs_space.shape, name="observations")
         scaled_inputs = tf.cast(inputs, tf.float32) / 255.0
         
-#         x = tf.keras.layers.Lambda(lambda y: y[...,-3:], output_shape=(64,64,3), name="slice_obs")(scaled_inputs)
-#         pfs = tf.keras.layers.Lambda(lambda y: y[...,:-3], output_shape=(64,64,9), name="slice_fs")(scaled_inputs)
         x, pfs = scaled_inputs[...,-3:], scaled_inputs[...,:-3]
-        pfs_ds = tf.keras.layers.AveragePooling2D(2,2,name='prev_frames')(pfs)
+        pfs_ds = tf.keras.layers.AveragePooling2D(4,4,name='prev_frames')(pfs)
         
-        x = conv_sequence(x, depths[0], extra_inputs=pfs_ds, prefix="seq0")
-        for i, depth in enumerate(depths[1:]):
-            x = conv_sequence(x, depth, prefix=f"seq{i+1}")
+        x = conv_sequence(x, depths[0], extra_inputs=None, prefix="seq0")
+        x = conv_sequence(x, depths[1], extra_inputs=pfs_ds, prefix="seq1")
+        x = conv_sequence(x, depths[2], extra_inputs=None, prefix="seq2")
 
         x = tf.keras.layers.Flatten()(x)
         x = tf.keras.layers.ReLU()(x)
