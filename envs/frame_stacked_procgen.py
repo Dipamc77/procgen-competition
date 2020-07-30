@@ -36,5 +36,5 @@ class FrameStackByChannels(Wrapper):
 # Register Env in Ray
 registry.register_env(
     "frame_stacked_procgen",  # This should be different from procgen_env_wrapper
-    lambda config: FrameStackByChannels(ProcgenEnvWrapper(config), 2)
+    lambda config: FrameStackByChannels(ProcgenEnvWrapper(config), 4)
 )
