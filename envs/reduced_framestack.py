@@ -39,14 +39,14 @@ class ReducedFrameStack(Wrapper):
         self.stackedobs[...,self.flatlen:self.flatlen + self.oldlen] = np.reshape(gray_res, self.oldobssh)
         self.stackedobs[...,:self.flatlen] = np.reshape(observation, self.newobssh)
         self.prev_obs = observation
-        return self.stackedobs, reward, done, info
+        return self.stackedobs.copy(), reward, done, info
 
     def reset(self, **kwargs):
         observation = self.env.reset(**kwargs)
         self.stackedobs[...] = 0
         self.stackedobs[...,:self.flatlen] = np.reshape(observation, self.newobssh)
         self.prev_obs = observation
-        return self.stackedobs
+        return self.stackedobs.copy()
     
 # Register Env in Ray
 registry.register_env(
