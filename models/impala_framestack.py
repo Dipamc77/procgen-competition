@@ -89,7 +89,7 @@ class ImpalaReducedFS(TFModelV2):
         depths = [32, 64, 64]
         fstack = 4
         imsize = [64,64,3]
-        reducedsize = [16,16]
+        reducedsize = [32,32,3*(fstack-1)]
         flatlen = np.prod(imsize)
         
         inputs = tf.keras.layers.Input(shape=obs_space.shape, name="observations")
@@ -97,10 +97,10 @@ class ImpalaReducedFS(TFModelV2):
         
         x, prev = scaled_inputs[...,:flatlen], scaled_inputs[...,flatlen:]
         x = tf.reshape(x, (-1,*imsize))
-        prev = tf.reshape(prev, (-1,*reducedsize,fstack-1))
+        prev = tf.reshape(prev, (-1,*reducedsize))
         
-        x = conv_sequence(x, depths[0], extra_inputs=None, prefix="seq0")
-        x = conv_sequence(x, depths[1], extra_inputs=prev, prefix="seq1")
+        x = conv_sequence(x, depths[0], extra_inputs=prev, prefix="seq0")
+        x = conv_sequence(x, depths[1], extra_inputs=None, prefix="seq1")
         x = conv_sequence(x, depths[2], extra_inputs=None, prefix="seq2")
 
         x = tf.keras.layers.Flatten()(x)
