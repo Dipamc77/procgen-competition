@@ -11,21 +11,23 @@ def conv_layer(depth, name):
     )
 
 
-def residual_block(x, depth, prefix):
+def residual_block(x, depth, prefix, extra_inputs=None):
     inputs = x
     assert inputs.get_shape()[-1].value == depth
     x = tf.keras.layers.ReLU()(x)
+    if extra_inputs is not None:
+        x = tf.keras.layers.Concatenate()([x, extra_inputs])
     x = conv_layer(depth, name=prefix + "_conv0")(x)
     x = tf.keras.layers.ReLU()(x)
     x = conv_layer(depth, name=prefix + "_conv1")(x)
     return x + inputs
 
 
-def conv_sequence(x, depth, prefix, pool=True):
+def conv_sequence(x, depth, prefix, pool=True, extra_inputs=None):
     x = conv_layer(depth, prefix + "_conv")(x)
     if pool:
         x = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="same")(x)
-    x = residual_block(x, depth, prefix=prefix + "_block0")
+    x = residual_block(x, depth, prefix=prefix + "_block0", extra_inputs=extra_inputs)
     x = residual_block(x, depth, prefix=prefix + "_block1")
     return x
 
@@ -48,8 +50,10 @@ class ImpalaDSCNN(TFModelV2):
 
         x = scaled_inputs
         x = tf.keras.layers.AveragePooling2D(2,2)(x)
+        x, prev = x[...,-3:], x[...,:-3]
+        prev = tf.stop_gradient(prev)
         x = tf.stop_gradient(x)
-        x = conv_sequence(x, depths[0], prefix="seq0", pool=False)
+        x = conv_sequence(x, depths[0], prefix="seq0", pool=False, extra_inputs=prev)
         x = conv_sequence(x, depths[1], prefix="seq1", pool=True)
         x = conv_sequence(x, depths[2], prefix="seq2", pool=True)
 
