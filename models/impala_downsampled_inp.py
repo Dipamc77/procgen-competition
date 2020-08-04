@@ -50,10 +50,10 @@ class ImpalaDSCNN(TFModelV2):
 
         x = scaled_inputs
         x = tf.keras.layers.AveragePooling2D(2,2)(x)
-        x, prev = x[...,-3:], x[...,:-3]
-        prev = tf.stop_gradient(prev)
+#         x, prev = x[...,-3:], x[...,:-3]
+#         prev = tf.stop_gradient(prev)
         x = tf.stop_gradient(x)
-        x = conv_sequence(x, depths[0], prefix="seq0", pool=False, extra_inputs=prev)
+        x = conv_sequence(x, depths[0], prefix="seq0", pool=False)
         x = conv_sequence(x, depths[1], prefix="seq1", pool=True)
         x = conv_sequence(x, depths[2], prefix="seq2", pool=True)
 
