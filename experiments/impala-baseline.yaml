@@ -69,7 +69,8 @@ procgen-ppo:
         # Training batch size, if applicable. Should be >= rollout_fragment_length.
         # Samples batches will be concatenated together to a batch of this size,
         # which is then passed to SGD.
-        train_batch_size: 16384 # 256 * 64
+#         train_batch_size: 16384 # 256 * 64
+        train_batch_size: 18432 # 256 * 64
         # Initial coefficient for KL divergence.
         kl_coeff: 0.0
         # Target value for KL divergence.
@@ -125,7 +126,7 @@ procgen-ppo:
         # Use PyTorch (instead of tf). If using `rllib train`, this can also be
         # enabled with the `--torch` flag.
         # NOTE: Some agents may not support `torch` yet and throw an error.
-        use_pytorch: False
+        use_pytorch: True
 
         ################################################
         ################################################
@@ -187,7 +188,8 @@ procgen-ppo:
             # Examples of implementing the model in Keras is also available
             # here :
             # https://github.com/ray-project/ray/blob/master/rllib/examples/custom_keras_model.py
-            custom_model: impala_cnn_tf
+#             custom_model: impala_cnn_tf
+            custom_model: impala_cnn_torch
             # Extra options to pass to custom class
             custom_options: {}
 
