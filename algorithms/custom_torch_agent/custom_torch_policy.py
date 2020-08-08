@@ -121,7 +121,7 @@ class CustomTorchPolicy(TorchPolicy):
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
         lrnow = self.config['lr']
         max_grad_norm = self.config['grad_clip']
-        ent_coef, vf_coef = self.config['vf_loss_coeff'], self.config['entropy_coeff']
+        ent_coef, vf_coef = self.config['entropy_coeff'], self.config['vf_loss_coeff']
         
         obs = samples['obs']
         ## np.isclose seems to be True always, otherwise compute again if needed
@@ -185,3 +185,15 @@ class CustomTorchPolicy(TorchPolicy):
 #             clipfrac = torch.mean((torch.abs(ratio - 1.0) > cliprange).float())
             
 #         return pg_loss.item(), vf_loss.item(), entropy.item(), approxkl.item(), clipfrac.item()
+    
+    @override(TorchPolicy)
+    def get_weights(self):
+        return {
+            k: v.cpu().detach().numpy()
+            for k, v in self.model.state_dict().items()
+        }
+    
+    @override(TorchPolicy)
+    def set_weights(self, weights):
+        weights = convert_to_torch_tensor(weights, device=self.device)
+        self.model.load_state_dict(weights)
