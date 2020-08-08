@@ -1,8 +1,9 @@
-from ray.rllib.policy import Policy
+from ray.rllib.policy.torch_policy import TorchPolicy
 import numpy as np
 from ray.rllib.utils.torch_ops import convert_to_non_torch_type, convert_to_torch_tensor
 from ray.rllib.utils import try_import_torch
 from ray.rllib.models import ModelCatalog
+from ray.rllib.utils.annotations import override
 
 torch, nn = try_import_torch()
 
@@ -28,7 +29,7 @@ def unroll(arr, targetshape):
     s = arr.shape
     return arr.reshape(*targetshape, *s[1:]).swapaxes(0, 1)
 
-class CustomTorchPolicy(Policy):
+class CustomTorchPolicy(TorchPolicy):
     """Example of a random policy
     If you are using tensorflow/pytorch to build custom policies,
     you might find `build_tf_policy` and `build_torch_policy` to
@@ -37,56 +38,42 @@ class CustomTorchPolicy(Policy):
     """
 
     def __init__(self, observation_space, action_space, config):
-        Policy.__init__(self, observation_space, action_space, config)
+        self.config = config
 
-        # You can replace this with whatever variable you want to save
-        # the state of the policy in. `get_weights` and `set_weights`
-        # are used for checkpointing the states and restoring the states
-        # from a checkpoint.
-        model = ModelCatalog.get_model_v2(obs_space=observation_space,
-                                           action_space=action_space,
-                                           num_outputs=action_space.n,
-                                           model_config=config["model"],
-                                           framework="torch")
+        dist_class, logit_dim = ModelCatalog.get_action_dist(
+            action_space, self.config["model"], framework="torch")
+        self.model = ModelCatalog.get_model_v2(
+            obs_space=observation_space,
+            action_space=action_space,
+            num_outputs=logit_dim,
+            model_config=self.config["model"],
+            framework="torch")
+
+        TorchPolicy.__init__(
+            self,
+            observation_space=observation_space,
+            action_space=action_space,
+            config=config,
+            model=self.model,
+            loss=None,
+            action_distribution_class=dist_class,
+        )
+
         self.framework = "torch"
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        self.model = model.to(self.device)
-        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=0.001, momentum=0.9)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         
     def _torch_tensor(self, arr):
         return torch.tensor(arr).to(self.device)
-
-    def compute_actions(
-        self,
-        obs_batch,
-        state_batches,
-        prev_action_batch=None,
-        prev_reward_batch=None,
-        info_batch=None,
-        episodes=None,
-        **kwargs
-    ):
-        """Return the action for a batch
-        Returns:
-            action_batch: List of actions for the batch
-            rnn_states: List of RNN states if any
-            info: Additional info
-        """
-        rnn_states = []
-        info = {}
-        obs_tensor = self._torch_tensor(obs_batch)
+    
+    def _value_function(self, arr):
+        tt = self._torch_tensor(arr)
         with torch.no_grad():
-            pi_logits, vf = self.model.forward(obs_tensor)
-            actions = sample_actions(pi_logits, self.device)
-            neglogp = neglogp_actions(pi_logits, actions)
-        
-        info['neglogpacs'] = neglogp.tolist()
-        info['values'] = vf.tolist()
-        action_batch = actions.tolist()
-#         import pdb; pdb.set_trace()
-
-        return action_batch, rnn_states, info
-
+            self.model.forward({"obs": tt}, None, None)
+            v = self.model.value_function()
+        return v.cpu().numpy()
+    
+    @override(TorchPolicy)
     def learn_on_batch(self, samples):
         """Fused compute gradients and apply gradients call.
         Either this or the combination of compute/apply grads must be
@@ -98,19 +85,22 @@ class CustomTorchPolicy(Policy):
             >>> ev.learn_on_batch(samples)
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
+
         nbatch = len(samples['dones'])
+        nbatch_train = self.config['sgd_minibatch_size']
         gamma, lam = self.config['gamma'], self.config['lambda']
         nsteps = self.config['rollout_fragment_length']
         nenvs = nbatch//nsteps
         ts = (nenvs, nsteps)
         
-        next_obs = self._torch_tensor(unroll(samples['new_obs'], ts)[-1])
-        with torch.no_grad():
-            _, last_values = self.model.forward(next_obs)
-        last_values = last_values.cpu().numpy()
+        next_obs = unroll(samples['new_obs'], ts)[-1]
+        last_values = self._value_function(next_obs)
+        values = np.empty((nbatch,), dtype=np.float32)
+        for start in range(0, nbatch, nbatch_train):
+            end = start + nbatch_train
+            values[start:end] = self._value_function(samples['obs'][start:end])
         
-        
-        mb_values = unroll(samples['values'], ts)
+        mb_values = unroll(values, ts)
         mb_rewards = unroll(samples['rewards'], ts)
         mb_dones = unroll(samples['dones'], ts)
         
@@ -127,7 +117,6 @@ class CustomTorchPolicy(Policy):
             mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
         
-#         import pdb; pdb.set_trace()
         
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
         lrnow = self.config['lr']
@@ -135,11 +124,11 @@ class CustomTorchPolicy(Policy):
         ent_coef, vf_coef = self.config['vf_loss_coeff'], self.config['entropy_coeff']
         
         obs = samples['obs']
-        neglogpacs = samples['neglogpacs']
+        ## np.isclose seems to be True always, otherwise compute again if needed
+        neglogpacs = -samples['action_logp'] 
         actions = samples['actions']
         returns = roll(mb_returns)
         values = roll(mb_values)
-        nbatch_train = self.config['sgd_minibatch_size']
         nminibatches = nbatch // nbatch_train
         noptepochs = self.config['num_sgd_iter']
 
@@ -170,7 +159,8 @@ class CustomTorchPolicy(Policy):
         advs = returns - values
         advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
 
-        pi_logits, vpred = self.model.forward(obs)
+        pi_logits, _ = self.model.forward({"obs": obs}, None, None)
+        vpred = self.model.value_function()
         neglogpac = neglogp_actions(pi_logits, actions)
         entropy = torch.mean(pi_entropy(pi_logits))
 
@@ -195,13 +185,3 @@ class CustomTorchPolicy(Policy):
 #             clipfrac = torch.mean((torch.abs(ratio - 1.0) > cliprange).float())
             
 #         return pg_loss.item(), vf_loss.item(), entropy.item(), approxkl.item(), clipfrac.item()
-
-    def get_weights(self):
-        return {
-            k: v.cpu().detach().numpy()
-            for k, v in self.model.state_dict().items()
-        }
-
-    def set_weights(self, weights):
-        weights = convert_to_torch_tensor(weights, device=self.device)
-        self.model.load_state_dict(weights)

@@ -75,25 +75,26 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         nn.init.orthogonal_(self.pi_fc.weight, gain=0.01)
         self.value_fc = nn.Linear(in_features=256, out_features=1)
         nn.init.orthogonal_(self.value_fc.weight, gain=1)
-        
+    
     @override(TorchModelV2)
-    def forward(self, obs):
-#         x = np.float32(input_dict["obs"])
-        x = obs.float()
+    def forward(self, input_dict, state, seq_lens):
+        x = input_dict["obs"].float()
         x = x / 255.0  # scale to 0-1
         x = x.permute(0, 3, 1, 2)  # NHWC => NCHW
-        x = nn.functional.max_pool2d(x, kernel_size=3, stride=2, padding=1)
-#         for conv_seq in self.conv_seqs:
-        x = self.conv_seqs[0](x, pool=False)
-        x = self.conv_seqs[1](x)
-        x = self.conv_seqs[2](x)
-
+        for conv_seq in self.conv_seqs:
+            x = conv_seq(x)
         x = torch.flatten(x, start_dim=1)
         x = nn.functional.relu(x)
         x = self.hidden_fc(x)
         x = nn.functional.relu(x)
-        pi_logits = self.pi_fc(x)
-        value = self.value_fc(x).squeeze(1)
-        return pi_logits, value
+        logits = self.pi_fc(x)
+        value = self.value_fc(x)
+        self._value = value.squeeze(1)
+        return logits, state
+
+    @override(TorchModelV2)
+    def value_function(self):
+        assert self._value is not None, "must call forward() first"
+        return self._value
     
 ModelCatalog.register_custom_model("impala_torch_custom", ImpalaCNN)

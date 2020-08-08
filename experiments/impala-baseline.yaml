@@ -1,5 +1,6 @@
 procgen-ppo:
-    env: procgen_env_wrapper  # Change this at your own risk :D
+#     env: procgen_env_wrapper  # Change this at your own risk :D
+    env: frame_stacked_procgen
     run: PPO
     # Can be replaced by any of the available agents as described at : 
     # https://github.com/ray-project/ray/blob/master/rllib/agents/registry.py#L103
@@ -192,6 +193,15 @@ procgen-ppo:
             custom_model: impala_cnn_torch
             # Extra options to pass to custom class
             custom_options: {}
+            
+        # We use this to generate the videos during training
+        evaluation_interval: 25
+        evaluation_num_workers: 1
+        evaluation_num_episodes: 3
+        evaluation_config:
+          num_envs_per_worker: 1
+          env_config:
+            render_mode: rgb_array
 
         ################################################
         ################################################

@@ -61,7 +61,7 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         shape = (c, h, w)
 
         conv_seqs = []
-        for out_channels in [16, 32, 32]:
+        for out_channels in [32, 64, 64]:
             conv_seq = ConvSequence(shape, out_channels)
             shape = conv_seq.get_output_shape()
             conv_seqs.append(conv_seq)
