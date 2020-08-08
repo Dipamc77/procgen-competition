@@ -25,9 +25,14 @@ def _import_custom_ppo_agent():
     from .custom_ppo.ppo import PPOTrainer
     return PPOTrainer
 
+def _import_custom_torch_agent():
+    from .custom_torch_agent.ppo import PPOTrainer
+    return PPOTrainer
+
 
 CUSTOM_ALGORITHMS = {
     "custom/CustomRandomAgent": _import_custom_random_agent,
     "RandomPolicy": _import_random_policy,
-    "CustomPPOAgent": _import_custom_ppo_agent
+    "CustomPPOAgent": _import_custom_ppo_agent,
+    "CustomTorchPPOAgent": _import_custom_torch_agent
 }
