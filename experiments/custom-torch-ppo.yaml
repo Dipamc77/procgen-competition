@@ -14,7 +14,7 @@ procgen-ppo:
     config:
         # === Settings for the Procgen Environment ===
         env_config:
-            env_name: coinrun
+            env_name: miner
             num_levels: 0
             start_level: 0
             paint_vel_info: False

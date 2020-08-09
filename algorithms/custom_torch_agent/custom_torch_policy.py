@@ -29,6 +29,49 @@ def unroll(arr, targetshape):
     s = arr.shape
     return arr.reshape(*targetshape, *s[1:]).swapaxes(0, 1)
 
+class RewardNormalizer(object):
+    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+    def __init__(self, gamma=0.1, cliprew=10.0, epsilon=1e-8):
+        self.mean = 0
+        self.var = 1
+        self.count = 1e-4
+        self.epsilon = epsilon
+        self.gamma = gamma
+        self.ret = 0
+        self.cliprew = cliprew
+        
+    def normalize(self, rews):
+        try:
+            self.ret = self.ret * self.gamma + rews
+        except:
+            self.ret = self.mean * self.gamma + rews # For the case if batch size is not same
+        self._update(self.ret)
+        rews = np.clip(rews / np.sqrt(self.var + self.epsilon), -self.cliprew, self.cliprew)
+        return rews
+
+    def _update(self, x):
+        batch_mean = np.mean(x, axis=0)
+        batch_var = np.var(x, axis=0)
+        batch_count = x.shape[0]
+        self._update_from_moments(batch_mean, batch_var, batch_count)
+
+    def _update_from_moments(self, batch_mean, batch_var, batch_count):
+        self.mean, self.var, self.count = update_mean_var_count_from_moments(
+            self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
+
+def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, batch_count):
+    delta = batch_mean - mean
+    tot_count = count + batch_count
+
+    new_mean = mean + delta * batch_count / tot_count
+    m_a = var * count
+    m_b = batch_var * batch_count
+    M2 = m_a + m_b + np.square(delta) * count * batch_count / tot_count
+    new_var = M2 / tot_count
+    new_count = tot_count
+
+    return new_mean, new_var, new_count
+
 class CustomTorchPolicy(TorchPolicy):
     """Example of a random policy
     If you are using tensorflow/pytorch to build custom policies,
@@ -62,6 +105,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.framework = "torch"
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.rewnorm = RewardNormalizer()
         
     def _torch_tensor(self, arr):
         return torch.tensor(arr).to(self.device)
@@ -85,7 +129,7 @@ class CustomTorchPolicy(TorchPolicy):
             >>> ev.learn_on_batch(samples)
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
-
+        
         nbatch = len(samples['dones'])
         nbatch_train = self.config['sgd_minibatch_size']
         gamma, lam = self.config['gamma'], self.config['lambda']
@@ -101,7 +145,9 @@ class CustomTorchPolicy(TorchPolicy):
             values[start:end] = self._value_function(samples['obs'][start:end])
         
         mb_values = unroll(values, ts)
-        mb_rewards = unroll(samples['rewards'], ts)
+#         mb_rewards = unroll(samples['rewards'], ts)
+        rnorm = self.rewnorm.normalize(samples['rewards'].copy())
+        mb_rewards = unroll(rnorm, ts)
         mb_dones = unroll(samples['dones'], ts)
         
         mb_returns = np.zeros_like(mb_rewards)
