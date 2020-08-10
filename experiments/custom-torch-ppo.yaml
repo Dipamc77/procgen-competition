@@ -1,6 +1,6 @@
 procgen-ppo:
-    env: frame_stacked_procgen
-#     env: procgen_env_wrapper
+  #   env: frame_stacked_procgen
+    env: procgen_env_wrapper
     run: CustomTorchPPOAgent
     # === Stop Conditions ===
     stop:
@@ -14,7 +14,7 @@ procgen-ppo:
     config:
         # === Settings for the Procgen Environment ===
         env_config:
-            env_name: miner
+            env_name: bigfish
             num_levels: 0
             start_level: 0
             paint_vel_info: False
