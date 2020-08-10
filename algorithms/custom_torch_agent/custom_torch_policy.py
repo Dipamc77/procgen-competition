@@ -31,31 +31,33 @@ def unroll(arr, targetshape):
 
 class RewardNormalizer(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
-    def __init__(self, gamma=0.1, cliprew=10.0, epsilon=1e-8):
-        self.mean = 0
-        self.var = 1
-        self.count = 1e-4
+    def __init__(self, gamma=0.99, cliprew=10.0, epsilon=1e-8):
         self.epsilon = epsilon
         self.gamma = gamma
-        self.ret = 0
+        self.ret_rms = RunningMeanStd(shape=())
         self.cliprew = cliprew
+        self.ret = 0 # size updates after first pass
         
     def normalize(self, rews):
-        try:
-            self.ret = self.ret * self.gamma + rews
-        except:
-            self.ret = self.mean * self.gamma + rews # For the case if batch size is not same
-        self._update(self.ret)
-        rews = np.clip(rews / np.sqrt(self.var + self.epsilon), -self.cliprew, self.cliprew)
+        self.ret = self.ret * self.gamma + rews
+        self.ret_rms.update(self.ret)
+        rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
         return rews
+    
+class RunningMeanStd(object):
+    # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
+    def __init__(self, epsilon=1e-4, shape=()):
+        self.mean = np.zeros(shape, 'float64')
+        self.var = np.ones(shape, 'float64')
+        self.count = epsilon
 
-    def _update(self, x):
+    def update(self, x):
         batch_mean = np.mean(x, axis=0)
         batch_var = np.var(x, axis=0)
         batch_count = x.shape[0]
-        self._update_from_moments(batch_mean, batch_var, batch_count)
+        self.update_from_moments(batch_mean, batch_var, batch_count)
 
-    def _update_from_moments(self, batch_mean, batch_var, batch_count):
+    def update_from_moments(self, batch_mean, batch_var, batch_count):
         self.mean, self.var, self.count = update_mean_var_count_from_moments(
             self.mean, self.var, self.count, batch_mean, batch_var, batch_count)
 
@@ -145,9 +147,10 @@ class CustomTorchPolicy(TorchPolicy):
             values[start:end] = self._value_function(samples['obs'][start:end])
         
         mb_values = unroll(values, ts)
-#         mb_rewards = unroll(samples['rewards'], ts)
-        rnorm = self.rewnorm.normalize(samples['rewards'].copy())
-        mb_rewards = unroll(rnorm, ts)
+        mb_origrewards = unroll(samples['rewards'], ts)
+        mb_rewards =  np.zeros_like(mb_origrewards)
+        for ii in range(nsteps):
+            mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii])
         mb_dones = unroll(samples['dones'], ts)
         
         mb_returns = np.zeros_like(mb_rewards)
