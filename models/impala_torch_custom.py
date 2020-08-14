@@ -75,6 +75,8 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         nn.init.orthogonal_(self.pi_fc.weight, gain=0.01)
         self.value_fc = nn.Linear(in_features=256, out_features=1)
         nn.init.orthogonal_(self.value_fc.weight, gain=1)
+        self.layernorm = nn.LayerNorm(256)
+
     
     @override(TorchModelV2)
     def forward(self, input_dict, state, seq_lens):
@@ -82,14 +84,17 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         x = x / 255.0  # scale to 0-1
         x = x.permute(0, 3, 1, 2)  # NHWC => NCHW
 #         for conv_seq in self.conv_seqs:
-        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
-        x = self.conv_seqs[0](x, pool=False)
+#         x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+#         x = self.conv_seqs[0](x, pool=False)
+        x = self.conv_seqs[0](x, pool=True)
         x = self.conv_seqs[1](x)
         x = self.conv_seqs[2](x)
         x = torch.flatten(x, start_dim=1)
         x = nn.functional.relu(x)
         x = self.hidden_fc(x)
-        x = nn.functional.relu(x)
+        x = self.layernorm(x)
+        x = torch.tanh(x)
+#         x = nn.functional.relu(x)
         logits = self.pi_fc(x)
         value = self.value_fc(x)
         self._value = value.squeeze(1)

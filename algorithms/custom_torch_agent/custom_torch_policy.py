@@ -131,7 +131,12 @@ class CustomTorchPolicy(TorchPolicy):
             >>> ev.learn_on_batch(samples)
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
-        
+#         numeps = np.sum(samples['dones'])
+#         if numeps > 0:
+#             print("Average reward", np.sum(samples['rewards'])/numeps, "Num episodes", numeps)
+#         else:
+#             print("Average rewad", 0)
+            
         nbatch = len(samples['dones'])
         nbatch_train = self.config['sgd_minibatch_size']
         gamma, lam = self.config['gamma'], self.config['lambda']
@@ -165,7 +170,6 @@ class CustomTorchPolicy(TorchPolicy):
             delta = mb_rewards[t] + gamma * nextvalues * nextnonterminal - mb_values[t]
             mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
-        
         
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
         lrnow = self.config['lr']
