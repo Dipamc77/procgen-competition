@@ -152,10 +152,11 @@ class CustomTorchPolicy(TorchPolicy):
             values[start:end] = self._value_function(samples['obs'][start:end])
         
         mb_values = unroll(values, ts)
-        mb_origrewards = unroll(samples['rewards'], ts)
-        mb_rewards =  np.zeros_like(mb_origrewards)
-        for ii in range(nsteps):
-            mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii])
+#         mb_origrewards = unroll(samples['rewards'], ts)
+#         mb_rewards =  np.zeros_like(mb_origrewards)
+#         for ii in range(nsteps):
+#             mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii])
+        mb_rewards = unroll(samples['rewards'], ts)
         mb_dones = unroll(samples['dones'], ts)
         
         mb_returns = np.zeros_like(mb_rewards)

@@ -1,6 +1,6 @@
 procgen-ppo:
-#     env: frame_stacked_procgen
-    env: procgen_env_wrapper
+    env: frame_stacked_procgen
+#     env: procgen_env_wrapper
     run: CustomTorchPPOAgent
     # === Stop Conditions ===
     stop:
