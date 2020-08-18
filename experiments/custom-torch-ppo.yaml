@@ -1,6 +1,6 @@
 procgen-ppo:
-    env: frame_stacked_procgen
-#     env: reward_monitor
+#     env: frame_stacked_procgen
+    env: reward_monitor
     run: CustomTorchPPOAgent
     # === Stop Conditions ===
     stop:
