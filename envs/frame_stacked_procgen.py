@@ -6,12 +6,12 @@ from gym import Wrapper
 from ray.tune import registry
 
 from envs.procgen_env_wrapper import ProcgenEnvWrapper
+from envs.reward_monitor import RewardMonitor
 
 class FrameStackByChannels(Wrapper):
     def __init__(self, env, num_stack):
         super().__init__(env)
         self.num_stack = num_stack
-
         
         low = np.tile(env.observation_space.low, num_stack)
         high = np.tile(env.observation_space.high, num_stack)
@@ -35,5 +35,5 @@ class FrameStackByChannels(Wrapper):
 # Register Env in Ray
 registry.register_env(
     "frame_stacked_procgen",  # This should be different from procgen_env_wrapper
-    lambda config: FrameStackByChannels(ProcgenEnvWrapper(config), 2)
+    lambda config: FrameStackByChannels(RewardMonitor(ProcgenEnvWrapper(config)), 2)
 )

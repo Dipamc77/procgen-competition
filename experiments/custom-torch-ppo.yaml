@@ -1,6 +1,6 @@
 procgen-ppo:
     env: frame_stacked_procgen
-#     env: procgen_env_wrapper
+#     env: reward_monitor
     run: CustomTorchPPOAgent
     # === Stop Conditions ===
     stop:
@@ -56,7 +56,9 @@ procgen-ppo:
         # === Settings for Model ===
         model:
             custom_model: impala_torch_custom
-            custom_options: {depths: [32, 64, 64]}
+            custom_options: 
+                depths: [32, 64, 64]
+                nlatents: 512
             
 #         evaluation_interval: 2
 #         evaluation_num_workers: 1

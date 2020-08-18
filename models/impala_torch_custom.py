@@ -60,10 +60,11 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         nn.Module.__init__(self)
 
         depths = model_config['custom_options'].get('depths') or [16, 32, 32]
+        nlatents = model_config['custom_options'].get('nlatents') or 256
         
         h, w, c = obs_space.shape
-#         shape = (c, h, w)
-        shape = (4, h, w)
+        shape = (c, h, w)
+#         shape = (4, h, w)
 
         conv_seqs = []
         for out_channels in depths:
@@ -71,12 +72,12 @@ class ImpalaCNN(TorchModelV2, nn.Module):
             shape = conv_seq.get_output_shape()
             conv_seqs.append(conv_seq)
         self.conv_seqs = nn.ModuleList(conv_seqs)
-        self.hidden_fc = nn.Linear(in_features=shape[0] * shape[1] * shape[2], out_features=256)
-        self.pi_fc = nn.Linear(in_features=256, out_features=num_outputs)
+        self.hidden_fc = nn.Linear(in_features=shape[0] * shape[1] * shape[2], out_features=nlatents)
+        self.pi_fc = nn.Linear(in_features=nlatents, out_features=num_outputs)
         nn.init.orthogonal_(self.pi_fc.weight, gain=0.01)
-        self.value_fc = nn.Linear(in_features=256, out_features=1)
+        self.value_fc = nn.Linear(in_features=nlatents, out_features=1)
         nn.init.orthogonal_(self.value_fc.weight, gain=1)
-        self.layernorm = nn.LayerNorm(256)
+        self.layernorm = nn.LayerNorm(nlatents)
 
     
     @override(TorchModelV2)
@@ -84,9 +85,9 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         x = input_dict["obs"].float()
         x = x / 255.0  # scale to 0-1
         x = x.permute(0, 3, 1, 2)  # NHWC => NCHW
-        xc, xo = x[:,-3:,:,:], x[:,:-3,:,:]
-        xo = torch.mean(xo, dim=1, keepdim=True)
-        x = torch.cat((xc, xo), dim=1)
+#         xc, xo = x[:,-3:,:,:], x[:,:-3,:,:]
+#         xo = torch.mean(xo, dim=1, keepdim=True)
+#         x = torch.cat((xc, xo), dim=1)
         x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
         x = self.conv_seqs[0](x, pool=False)
 #         x = self.conv_seqs[0](x, pool=True)

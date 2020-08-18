@@ -4,6 +4,7 @@ from ray.rllib.utils.torch_ops import convert_to_non_torch_type, convert_to_torc
 from ray.rllib.utils import try_import_torch
 from ray.rllib.models import ModelCatalog
 from ray.rllib.utils.annotations import override
+from collections import deque
 
 torch, nn = try_import_torch()
 
@@ -28,6 +29,9 @@ def roll(arr):
 def unroll(arr, targetshape):
     s = arr.shape
     return arr.reshape(*targetshape, *s[1:]).swapaxes(0, 1)
+
+def safe_mean(xs):
+    return -np.inf if len(xs) == 0 else np.mean(xs)
 
 class RewardNormalizer(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
@@ -108,6 +112,11 @@ class CustomTorchPolicy(TorchPolicy):
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         self.rewnorm = RewardNormalizer()
+        self.reward_deque = deque(maxlen=100)
+        self.best_reward = -np.inf
+        self.best_weights = None
+        self.timesteps_total = 0
+        self.target_timesteps = 8_000_000
         
     def _torch_tensor(self, arr):
         return torch.tensor(arr).to(self.device)
@@ -131,13 +140,22 @@ class CustomTorchPolicy(TorchPolicy):
             >>> ev.learn_on_batch(samples)
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
-#         numeps = np.sum(samples['dones'])
-#         if numeps > 0:
-#             print("Average reward", np.sum(samples['rewards'])/numeps, "Num episodes", numeps)
-#         else:
-#             print("Average rewad", 0)
-            
+        
         nbatch = len(samples['dones'])
+        self.timesteps_total += nbatch
+        
+        eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
+        self.reward_deque.extend(eprews)
+        mean_reward = safe_mean(eprews) if len(eprews) >= 100 else safe_mean(self.reward_deque)
+        if self.best_reward < mean_reward:
+            self.best_reward = mean_reward
+            self.best_weights = self.get_weights()
+            
+        if self.timesteps_total > self.target_timesteps:
+            if self.best_weights is not None:
+                self.set_weights(self.best_weights)
+                return {}
+        
         nbatch_train = self.config['sgd_minibatch_size']
         gamma, lam = self.config['gamma'], self.config['lambda']
         nsteps = self.config['rollout_fragment_length']
