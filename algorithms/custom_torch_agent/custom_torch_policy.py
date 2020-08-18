@@ -111,7 +111,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.framework = "torch"
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-        self.rewnorm = RewardNormalizer()
+        self.rewnorm = RewardNormalizer(cliprew=25.0)
         self.reward_deque = deque(maxlen=100)
         self.best_reward = -np.inf
         self.best_weights = None
