@@ -163,32 +163,10 @@ class CustomTorchPolicy(TorchPolicy):
         ts = (nenvs, nsteps)
         
         next_obs = unroll(samples['new_obs'], ts)[-1]
-        last_values = self._value_function(next_obs)
-        values = np.empty((nbatch,), dtype=np.float32)
-        for start in range(0, nbatch, nbatch_train):
-            end = start + nbatch_train
-            values[start:end] = self._value_function(samples['obs'][start:end])
-        
-        mb_values = unroll(values, ts)
-#         mb_origrewards = unroll(samples['rewards'], ts)
-#         mb_rewards =  np.zeros_like(mb_origrewards)
-#         for ii in range(nsteps):
-#             mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii])
         mb_rewards = unroll(samples['rewards'], ts)
         mb_dones = unroll(samples['dones'], ts)
         
-        mb_returns = np.zeros_like(mb_rewards)
-        mb_advs = np.zeros_like(mb_rewards)
-        lastgaelam = 0
-        for t in reversed(range(nsteps)):
-            if t == nsteps - 1:
-                nextvalues = last_values
-            else:
-                nextvalues = mb_values[t+1]
-            nextnonterminal = 1.0 - mb_dones[t]
-            delta = mb_rewards[t] + gamma * nextvalues * nextnonterminal - mb_values[t]
-            mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
-        mb_returns = mb_advs + mb_values
+        
         
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
         lrnow = self.config['lr']
@@ -199,13 +177,35 @@ class CustomTorchPolicy(TorchPolicy):
         ## np.isclose seems to be True always, otherwise compute again if needed
         neglogpacs = -samples['action_logp'] 
         actions = samples['actions']
-        returns = roll(mb_returns)
-        values = roll(mb_values)
+        
         nminibatches = nbatch // nbatch_train
         noptepochs = self.config['num_sgd_iter']
 
         inds = np.arange(nbatch)
         for _ in range(noptepochs):
+            
+            last_values = self._value_function(next_obs)
+            values = np.empty((nbatch,), dtype=np.float32)
+            for start in range(0, nbatch, nbatch_train):
+                end = start + nbatch_train
+                values[start:end] = self._value_function(samples['obs'][start:end])
+
+            mb_values = unroll(values, ts)
+            mb_returns = np.zeros_like(mb_rewards)
+            mb_advs = np.zeros_like(mb_rewards)
+            lastgaelam = 0
+            for t in reversed(range(nsteps)):
+                if t == nsteps - 1:
+                    nextvalues = last_values
+                else:
+                    nextvalues = mb_values[t+1]
+                nextnonterminal = 1.0 - mb_dones[t]
+                delta = mb_rewards[t] + gamma * nextvalues * nextnonterminal - mb_values[t]
+                mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
+            mb_returns = mb_advs + mb_values
+            returns = roll(mb_returns)
+            values = roll(mb_values)
+            
             np.random.shuffle(inds)
             for start in range(0, nbatch, nbatch_train):
                 end = start + nbatch_train
