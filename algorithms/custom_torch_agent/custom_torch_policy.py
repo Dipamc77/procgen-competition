@@ -204,14 +204,26 @@ class CustomTorchPolicy(TorchPolicy):
                 mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
             mb_returns = mb_advs + mb_values
             returns = roll(mb_returns)
-            values = roll(mb_values)
+#             values = roll(mb_values)
+            advs = roll(mb_advs)
+    
+            # Normalize advantages by rollout
+            slice_idx = [0] + list(np.where(samples['dones'])[0] + 1) + [nbatch]
+            for si in range(len(slice_idx)-1):
+                start_idx, end_idx = slice_idx[si], slice_idx[si+1]
+                if start_idx < end_idx:
+                    adv_idx = advs[start_idx:end_idx]
+                    adv_norm = (adv_idx - np.mean(adv_idx))/(np.std(adv_idx) + 1e-8) 
+                    advs[start_idx:end_idx] = adv_norm
             
             np.random.shuffle(inds)
             for start in range(0, nbatch, nbatch_train):
                 end = start + nbatch_train
                 mbinds = inds[start:end]
                 slices = (torch.from_numpy(arr[mbinds]).to(self.device)
-                          for arr in (obs, returns, actions, values, neglogpacs))
+#                           for arr in (obs, returns, actions, values, neglogpacs))
+                          for arr in (obs, returns, actions, advs, neglogpacs))
+
                 self._batch_train(lrnow, 
                                   cliprange, vfcliprange, max_grad_norm,
                                   ent_coef, vf_coef,
@@ -222,24 +234,28 @@ class CustomTorchPolicy(TorchPolicy):
     def _batch_train(self, lr, 
                      cliprange, vfcliprange, max_grad_norm,
                      ent_coef, vf_coef,
-                     obs, returns, actions, values, neglogpac_old):
+#                      obs, returns, actions, values, neglogpac_old):
+                      obs, returns, actions, advs, neglogpac_old):
+
         
         for g in self.optimizer.param_groups:
             g['lr'] = lr
         self.optimizer.zero_grad()
 
-        advs = returns - values
-        advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
+#         advs = returns - values
+#         advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
 
         pi_logits, _ = self.model.forward({"obs": obs}, None, None)
         vpred = self.model.value_function()
         neglogpac = neglogp_actions(pi_logits, actions)
         entropy = torch.mean(pi_entropy(pi_logits))
 
-        vpredclipped = values + torch.clamp(vpred - values, -cliprange, cliprange)
-        vf_losses1 = torch.pow((vpred - returns), 2)
-        vf_losses2 = torch.pow((vpredclipped - returns), 2)
-        vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2))
+#         vpredclipped = values + torch.clamp(vpred - values, -cliprange, cliprange)
+#         vf_losses1 = torch.pow((vpred - returns), 2)
+#         vf_losses2 = torch.pow((vpredclipped - returns), 2)
+#         vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2))
+
+        vf_loss = .5 * torch.mean(torch.pow((vpred - returns), 2))
 
         ratio = torch.exp(neglogpac_old - neglogpac)
         pg_losses1 = -advs * ratio
