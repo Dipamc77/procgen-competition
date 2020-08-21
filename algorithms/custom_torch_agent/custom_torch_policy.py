@@ -33,6 +33,73 @@ def unroll(arr, targetshape):
 def safe_mean(xs):
     return -np.inf if len(xs) == 0 else np.mean(xs)
 
+from skimage.util import view_as_windows
+import numpy as np
+def pad_and_random_crop(imgs, out, pad):
+    """
+    Vectorized pad and random crop
+    Assumes square images?
+    args:
+    imgs: shape (B,H,W,C)
+    out: output size (e.g. 64)
+    """
+    # n: batch size.
+    imgs = np.pad(imgs, [[0, 0], [pad, pad], [pad, pad], [0, 0]])
+    n = imgs.shape[0]
+    img_size = imgs.shape[1] # e.g. 64
+    crop_max = img_size - out
+    w1 = np.random.randint(0, crop_max, n)
+    h1 = np.random.randint(0, crop_max, n)
+    # creates all sliding window
+    # combinations of size (out)
+    windows = view_as_windows(imgs, (1, out, out, 1))[..., 0,:,:, 0]
+    # selects a random window
+    # for each batch element
+    cropped = windows[np.arange(n), w1, h1]
+    cropped = cropped.transpose(0,2,3,1)
+    return cropped
+
+
+class RetuneSelector:
+    def __init__(self, nbatch, ob_space, ac_space, skips = 800_000, replay_size = 200_000, num_retunes = 5):
+        self.skips = skips + (-skips) % nbatch
+        self.replay_size = replay_size + (-replay_size) % nbatch
+        self.exp_replay = np.empty((self.replay_size, *ob_space.shape), dtype=np.uint8)
+        self.batch_size = nbatch
+        self.batches_in_replay = self.replay_size // nbatch
+        
+        self.num_retunes = num_retunes
+        self.ac_space = ac_space
+        self.ob_space = ob_space
+        
+        self.cooldown_counter = self.skips // self.batch_size
+        self.replay_index = 0
+        self.buffer_full = False
+
+    def update(self, obs_batch):
+        if self.num_retunes == 0:
+            return False
+        
+        if self.cooldown_counter > 0:
+            self.cooldown_counter -= 1
+            return False
+        
+        start = self.replay_index * self.batch_size
+        end = start + self.batch_size
+        self.exp_replay[start:end] = obs_batch
+        
+        self.replay_index = (self.replay_index + 1) % self.batches_in_replay
+        self.buffer_full = self.buffer_full or (self.replay_index == 0)
+        
+        return self.buffer_full
+        
+    def retune_done(self):
+        self.cooldown_counter = self.skips // self.batch_size
+        self.num_retunes -= 1
+        self.replay_index = 0
+        self.buffer_full = False
+    
+
 class RewardNormalizer(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
     def __init__(self, gamma=0.99, cliprew=10.0, epsilon=1e-8):
@@ -117,16 +184,22 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_weights = None
         self.timesteps_total = 0
         self.target_timesteps = 8_000_000
+        nbatch = self.config['train_batch_size']
+        self.retune_selector = RetuneSelector(nbatch, observation_space, action_space, 
+                                              skips = 300_000, replay_size = 200_000, num_retunes = 14)
         
     def _torch_tensor(self, arr):
         return torch.tensor(arr).to(self.device)
     
-    def _value_function(self, arr):
+    def _value_function(self, arr, ret_pi=False):
         tt = self._torch_tensor(arr)
         with torch.no_grad():
-            self.model.forward({"obs": tt}, None, None)
+            pi, _ = self.model.forward({"obs": tt}, None, None)
             v = self.model.value_function()
-        return v.cpu().numpy()
+        if not ret_pi:
+            return v.cpu().numpy()
+        else:
+            return v.cpu().numpy(), pi.cpu().numpy()
     
     @override(TorchPolicy)
     def learn_on_batch(self, samples):
@@ -144,31 +217,42 @@ class CustomTorchPolicy(TorchPolicy):
         nbatch = len(samples['dones'])
         self.timesteps_total += nbatch
         
+        ## Best reward model selection
         eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
         self.reward_deque.extend(eprews)
         mean_reward = safe_mean(eprews) if len(eprews) >= 100 else safe_mean(self.reward_deque)
         if self.best_reward < mean_reward:
             self.best_reward = mean_reward
             self.best_weights = self.get_weights()
-            
+           
         if self.timesteps_total > self.target_timesteps:
             if self.best_weights is not None:
                 self.set_weights(self.best_weights)
-                return {}
-        
+                return {} # Not doing last optimization step - This is intentional due to noisy gradients
+          
+        obs = samples['obs']
+        ## Distill with augmentation
+        should_retune = self.retune_selector.update(obs)
+        if should_retune:
+            self.retune_with_augmentation(obs)
+            return {}
+         
+        ## Config data values
         nbatch_train = self.config['sgd_minibatch_size']
         gamma, lam = self.config['gamma'], self.config['lambda']
         nsteps = self.config['rollout_fragment_length']
         nenvs = nbatch//nsteps
         ts = (nenvs, nsteps)
         
+        ## Value prediction
         next_obs = unroll(samples['new_obs'], ts)[-1]
         last_values = self._value_function(next_obs)
         values = np.empty((nbatch,), dtype=np.float32)
-        for start in range(0, nbatch, nbatch_train):
+        for start in range(0, nbatch, nbatch_train): # Causes OOM up if trying to do all at once (TODO: Try bigger than nbatch_train)
             end = start + nbatch_train
             values[start:end] = self._value_function(samples['obs'][start:end])
         
+        ## Reward Normalization - No reward norm works well for many envs
         mb_values = unroll(values, ts)
 #         mb_origrewards = unroll(samples['rewards'], ts)
 #         mb_rewards =  np.zeros_like(mb_origrewards)
@@ -177,6 +261,7 @@ class CustomTorchPolicy(TorchPolicy):
         mb_rewards = unroll(samples['rewards'], ts)
         mb_dones = unroll(samples['dones'], ts)
         
+        ## GAE
         mb_returns = np.zeros_like(mb_rewards)
         mb_advs = np.zeros_like(mb_rewards)
         lastgaelam = 0
@@ -190,20 +275,20 @@ class CustomTorchPolicy(TorchPolicy):
             mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
         mb_returns = mb_advs + mb_values
         
+        ## Data from config
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
         lrnow = self.config['lr']
         max_grad_norm = self.config['grad_clip']
         ent_coef, vf_coef = self.config['entropy_coeff'], self.config['vf_loss_coeff']
         
-        obs = samples['obs']
-        ## np.isclose seems to be True always, otherwise compute again if needed
-        neglogpacs = -samples['action_logp'] 
+#         obs = samples['obs']
+        neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
         actions = samples['actions']
         returns = roll(mb_returns)
-        values = roll(mb_values)
         nminibatches = nbatch // nbatch_train
         noptepochs = self.config['num_sgd_iter']
 
+        ## Train multiple epochs
         inds = np.arange(nbatch)
         for _ in range(noptepochs):
             np.random.shuffle(inds)
@@ -252,11 +337,49 @@ class CustomTorchPolicy(TorchPolicy):
         nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
         self.optimizer.step()
         
-#         with torch.no_grad():
-#             approxkl = .5 * torch.mean(torch.pow((neglogpac - neglogpac_old), 2))
-#             clipfrac = torch.mean((torch.abs(ratio - 1.0) > cliprange).float())
-            
-#         return pg_loss.item(), vf_loss.item(), entropy.item(), approxkl.item(), clipfrac.item()
+    def retune_with_augmentation(self, obs):
+        nbatch_train = self.config['sgd_minibatch_size']
+        retune_epochs = 2
+        replay_size = self.retune_selector.replay_size
+        replay_vf = np.empty((replay_size,), dtype=np.float32)
+        replay_pi = np.empty((replay_size, self.retune_selector.ac_space.n), dtype=np.float32)
+
+        # Store current value function and policy logits
+        for start in range(0, replay_size, nbatch_train):
+            end = start + nbatch_train
+            replay_batch = self.retune_selector.exp_replay[start:end]
+            replay_vf[start:end], replay_pi[start:end] = self._value_function(replay_batch, ret_pi=True)
+
+        # Tune vf and pi heads to older predictions with augmented observations
+        inds = np.arange(len(self.retune_selector.exp_replay))
+        for ep in range(retune_epochs):
+            np.random.shuffle(inds)
+            for start in range(0, replay_size, nbatch_train):
+                end = start + nbatch_train
+                mbinds = inds[start:end]
+                slices = [self.retune_selector.exp_replay[mbinds], 
+                          torch.from_numpy(replay_vf[mbinds]).to(self.device), 
+                          torch.from_numpy(replay_pi[mbinds]).to(self.device)]
+
+        self.retune_selector.retune_done()
+ 
+    def tune_policy(self, obs, target_vf, target_pi, retune_vf_loss_coeff):
+        obs_aug = torch.from_numpy(pad_and_random_crop(obs, 64, 10)).to(self.device)
+        with torch.no_grad():
+            tpi_log_softmax = nn.functional.log_softmax(target_pi, dim=1)
+            tpi_softmax = torch.exp(tpi_log_softmax)
+        self.optimizer.zero_grad()
+        pi_logits, _ = self.model.forward({"obs": obs_aug}, None, None)
+        vpred = self.model.value_function()
+        pi_log_softmax =  nn.functional.log_softmax(pi_logits, dim=1)
+#         pi_loss = nn.functional.kl_div(pi_softmax, tpi_log_softmax, reduction='batchmean', log_target=True)
+        # kl_div in torch 1.3.1 has numerical issues
+        pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) 
+        vf_loss = .5 * torch.mean(torch.pow(vf - target_vf, 2))
+        loss = retune_vf_loss_coeff * vf_loss + pi_loss
+        
+        loss.backward()
+        self.optimizer.step()
     
     @override(TorchPolicy)
     def get_weights(self):
