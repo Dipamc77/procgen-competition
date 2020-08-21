@@ -360,6 +360,7 @@ class CustomTorchPolicy(TorchPolicy):
                 slices = [self.retune_selector.exp_replay[mbinds], 
                           torch.from_numpy(replay_vf[mbinds]).to(self.device), 
                           torch.from_numpy(replay_pi[mbinds]).to(self.device)]
+                self.tune_policy(*slices, 0.5)
 
         self.retune_selector.retune_done()
  
@@ -375,7 +376,7 @@ class CustomTorchPolicy(TorchPolicy):
 #         pi_loss = nn.functional.kl_div(pi_softmax, tpi_log_softmax, reduction='batchmean', log_target=True)
         # kl_div in torch 1.3.1 has numerical issues
         pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) 
-        vf_loss = .5 * torch.mean(torch.pow(vf - target_vf, 2))
+        vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
         loss = retune_vf_loss_coeff * vf_loss + pi_loss
         
         loss.backward()
