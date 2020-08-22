@@ -42,6 +42,13 @@ procgen-ppo:
         horizon: null
         soft_horizon: False
         no_done_at_end: False
+        
+        # Custom switches
+        retune_skips: 300000
+        retune_replay_size: 200000
+        num_retunes: 6
+        retune_epochs: 3
+        standardize_rewards: False
 
         normalize_actions: False
         clip_rewards: null

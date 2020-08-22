@@ -67,7 +67,14 @@ DEFAULT_CONFIG = with_common_config({
     # Set this to True for debugging on non-GPU machines (set `num_gpus` > 0).
     "_fake_gpus": False,
     # Use PyTorch as framework?
-    "use_pytorch": True
+    "use_pytorch": True,
+    
+    # Custom swithches
+    "retune_skips": 300000,
+    "retune_replay_size": 200000,
+    "num_retunes": 6,
+    "retune_epochs": 3,
+    "standardize_rewards": False,
 })
 # __sphinx_doc_end__
 # yapf: enable

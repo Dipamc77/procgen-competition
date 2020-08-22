@@ -54,11 +54,12 @@ class ImpalaCNN(TorchModelV2, nn.Module):
     """
 
     def __init__(self, obs_space, action_space, num_outputs, model_config,
-                 name):
+                 name, device):
         TorchModelV2.__init__(self, obs_space, action_space, num_outputs,
                               model_config, name)
         nn.Module.__init__(self)
 
+        self.device = device
         depths = model_config['custom_options'].get('depths') or [16, 32, 32]
         nlatents = model_config['custom_options'].get('nlatents') or 256
         
@@ -84,9 +85,7 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         x = input_dict["obs"].float()
         x = x / 255.0  # scale to 0-1
         x = x.permute(0, 3, 1, 2)  # NHWC => NCHW
-        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
-        x = self.conv_seqs[0](x, pool=False)
-#        x = self.conv_seqs[0](x, pool=True)
+        x = self.conv_seqs[0](x)
         x = self.conv_seqs[1](x)
         x = self.conv_seqs[2](x)
         x = torch.flatten(x, start_dim=1)
@@ -104,5 +103,25 @@ class ImpalaCNN(TorchModelV2, nn.Module):
     def value_function(self):
         assert self._value is not None, "must call forward() first"
         return self._value
+    
+    def vf_pi(self, obs, no_grad=False, ret_numpy=False, to_torch=False):
+        if to_torch:
+            obs = torch.tensor(obs).to(self.device)
+            
+        def v_pi(obs):
+            pi, _ = self.forward({"obs": obs}, None, None)
+            v = self.value_function()
+            return v, pi
+        
+        if no_grad:
+            with torch.no_grad():
+                v, pi = v_pi(obs)
+        else:
+            v, pi = v_pi(obs)
+        
+        if ret_numpy:
+            return v.cpu().numpy(), pi.cpu().numpy()
+        else:
+            return v, pi
     
 ModelCatalog.register_custom_model("impala_torch_custom", ImpalaCNN)
