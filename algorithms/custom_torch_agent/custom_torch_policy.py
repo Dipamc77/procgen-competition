@@ -10,7 +10,6 @@ import time
 
 torch, nn = try_import_torch()
 
-
 class CustomTorchPolicy(TorchPolicy):
     """Example of a random policy
     If you are using tensorflow/pytorch to build custom policies,
@@ -52,7 +51,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_reward = -np.inf
         self.best_weights = None
         self.time_elapsed = 0
-        self.batch_start_time = time.time()
+        self.batch_end_time = time.time()
         self.timesteps_total = 0
         nbatch = self.config['train_batch_size']
         self.retune_selector = RetuneSelector(nbatch, observation_space, action_space, 
@@ -61,7 +60,7 @@ class CustomTorchPolicy(TorchPolicy):
                                               num_retunes = self.config['num_retunes'])
         
         self.target_timesteps = 8_000_000
-        self.buffer_time = 60 # TODO: Could try to do a median or mean time step check instead
+        self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
         self.max_time = 7200
 
     def to_tensor(self, arr):
@@ -83,6 +82,7 @@ class CustomTorchPolicy(TorchPolicy):
         nbatch = len(samples['dones'])
         should_skip_train_step = self.best_reward_model_select(samples)
         if should_skip_train_step:
+            self.update_batch_time()
             return {} # Not doing last optimization step - This is intentional due to noisy gradients
           
         obs = samples['obs']
@@ -90,6 +90,7 @@ class CustomTorchPolicy(TorchPolicy):
         should_retune = self.retune_selector.update(obs)
         if should_retune:
             self.retune_with_augmentation(obs)
+            self.update_batch_time()
             return {}
          
         ## Config data values
@@ -153,9 +154,14 @@ class CustomTorchPolicy(TorchPolicy):
                 mbinds = inds[start:end]
                 slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs))
                 self._batch_train(lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
-                
+        
+        self.update_batch_time()
         return {}
 
+    def update_batch_time(self):
+        self.time_elapsed += time.time() - self.batch_end_time
+        self.batch_end_time = time.time()
+        
     def _batch_train(self, lr, 
                      cliprange, vfcliprange, max_grad_norm,
                      ent_coef, vf_coef,
@@ -235,8 +241,6 @@ class CustomTorchPolicy(TorchPolicy):
     def best_reward_model_select(self, samples):
         nbatch = len(samples['dones'])
         self.timesteps_total += nbatch
-        self.time_elapsed += time.time() - self.batch_start_time
-        self.batch_start_time = time.time()
         
         ## Best reward model selection
         eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
@@ -248,8 +252,7 @@ class CustomTorchPolicy(TorchPolicy):
            
         if self.timesteps_total > self.target_timesteps or (self.time_elapsed + self.buffer_time) > self.max_time:
             if self.best_weights is not None:
-                self.model.load_state_dict(self.best_weights)
-#                 self.set_weights(self.best_weights)
+                self.set_model_weights(self.best_weights)
             return True
         else:
             return False
@@ -260,7 +263,8 @@ class CustomTorchPolicy(TorchPolicy):
             "timesteps_total": self.timesteps_total,
             "best_weights": self.best_weights,
             "reward_deque": self.reward_deque,
-            "batch_start_time": self.batch_start_time,
+            "batch_end_time": self.batch_end_time,
+            "num_retunes": self.retune_selector.num_retunes,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -268,8 +272,8 @@ class CustomTorchPolicy(TorchPolicy):
         self.timesteps_total = custom_state_vars["timesteps_total"]
         self.best_weights = custom_state_vars["best_weights"]
         self.reward_deque = custom_state_vars["reward_deque"]
-        self.batch_start_time = custom_state_vars["batch_start_time"]
-    
+        self.batch_end_time = custom_state_vars["batch_end_time"]
+        self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
     
     @override(TorchPolicy)
     def get_weights(self):
@@ -284,6 +288,9 @@ class CustomTorchPolicy(TorchPolicy):
     
     @override(TorchPolicy)
     def set_weights(self, weights):
-        current_weights = convert_to_torch_tensor(weights["current_weights"], device=self.device)
-        self.model.load_state_dict(current_weights)
+        self.set_model_weights(weights["current_weights"])
         self.set_custom_state_vars(weights["custom_state_vars"])
+        
+    def set_model_weights(self, model_weights):
+        model_weights = convert_to_torch_tensor(model_weights, device=self.device)
+        self.model.load_state_dict(model_weights)

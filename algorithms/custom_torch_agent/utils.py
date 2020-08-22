@@ -94,7 +94,9 @@ class RetuneSelector:
         self.num_retunes -= 1
         self.replay_index = 0
         self.buffer_full = False
-    
+        
+    def set_num_retunes(self, nr):
+        self.num_retunes = nr
 
 class RewardNormalizer(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
