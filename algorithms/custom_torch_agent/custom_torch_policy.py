@@ -6,6 +6,7 @@ from ray.rllib.models import ModelCatalog
 from ray.rllib.utils.annotations import override
 from collections import deque
 from .utils import *
+import time
 
 torch, nn = try_import_torch()
 
@@ -45,17 +46,23 @@ class CustomTorchPolicy(TorchPolicy):
 
         self.framework = "torch"
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-        self.rewnorm = RewardNormalizer(cliprew=25.0)
+        self.rewnorm = RewardNormalizer(cliprew=25.0) ## TODO: Might need to go to custom state
+        
         self.reward_deque = deque(maxlen=100)
         self.best_reward = -np.inf
         self.best_weights = None
+        self.time_elapsed = 0
+        self.batch_start_time = time.time()
         self.timesteps_total = 0
-        self.target_timesteps = 8_000_000
         nbatch = self.config['train_batch_size']
         self.retune_selector = RetuneSelector(nbatch, observation_space, action_space, 
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
+        
+        self.target_timesteps = 8_000_000
+        self.buffer_time = 60 # TODO: Could try to do a median or mean time step check instead
+        self.max_time = 7200
 
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -74,20 +81,9 @@ class CustomTorchPolicy(TorchPolicy):
         """
         
         nbatch = len(samples['dones'])
-        self.timesteps_total += nbatch
-        
-        ## Best reward model selection
-        eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
-        self.reward_deque.extend(eprews)
-        mean_reward = safe_mean(eprews) if len(eprews) >= 100 else safe_mean(self.reward_deque)
-        if self.best_reward < mean_reward:
-            self.best_reward = mean_reward
-            self.best_weights = self.get_weights()
-           
-        if self.timesteps_total > self.target_timesteps:
-            if self.best_weights is not None:
-                self.set_weights(self.best_weights)
-                return {} # Not doing last optimization step - This is intentional due to noisy gradients
+        should_skip_train_step = self.best_reward_model_select(samples)
+        if should_skip_train_step:
+            return {} # Not doing last optimization step - This is intentional due to noisy gradients
           
         obs = samples['obs']
         ## Distill with augmentation
@@ -142,7 +138,6 @@ class CustomTorchPolicy(TorchPolicy):
         max_grad_norm = self.config['grad_clip']
         ent_coef, vf_coef = self.config['entropy_coeff'], self.config['vf_loss_coeff']
         
-#         obs = samples['obs']
         neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
         actions = samples['actions']
         returns = roll(mb_returns)
@@ -236,15 +231,59 @@ class CustomTorchPolicy(TorchPolicy):
         
         loss.backward()
         self.optimizer.step()
+        
+    def best_reward_model_select(self, samples):
+        nbatch = len(samples['dones'])
+        self.timesteps_total += nbatch
+        self.time_elapsed += time.time() - self.batch_start_time
+        self.batch_start_time = time.time()
+        
+        ## Best reward model selection
+        eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
+        self.reward_deque.extend(eprews)
+        mean_reward = safe_mean(eprews) if len(eprews) >= 100 else safe_mean(self.reward_deque)
+        if self.best_reward < mean_reward:
+            self.best_reward = mean_reward
+            self.best_weights = self.get_weights()["current_weights"]
+           
+        if self.timesteps_total > self.target_timesteps or (self.time_elapsed + self.buffer_time) > self.max_time:
+            if self.best_weights is not None:
+                self.model.load_state_dict(self.best_weights)
+#                 self.set_weights(self.best_weights)
+            return True
+        else:
+            return False
+        
+    def get_custom_state_vars(self):
+        return {
+            "time_elapsed": self.time_elapsed,
+            "timesteps_total": self.timesteps_total,
+            "best_weights": self.best_weights,
+            "reward_deque": self.reward_deque,
+            "batch_start_time": self.batch_start_time,
+        }
+    
+    def set_custom_state_vars(self, custom_state_vars):
+        self.time_elapsed = custom_state_vars["time_elapsed"]
+        self.timesteps_total = custom_state_vars["timesteps_total"]
+        self.best_weights = custom_state_vars["best_weights"]
+        self.reward_deque = custom_state_vars["reward_deque"]
+        self.batch_start_time = custom_state_vars["batch_start_time"]
+    
     
     @override(TorchPolicy)
     def get_weights(self):
-        return {
+        weights = {}
+        weights["current_weights"] = {
             k: v.cpu().detach().numpy()
             for k, v in self.model.state_dict().items()
         }
+        weights["custom_state_vars"] = self.get_custom_state_vars()
+        return weights
+        
     
     @override(TorchPolicy)
     def set_weights(self, weights):
-        weights = convert_to_torch_tensor(weights, device=self.device)
-        self.model.load_state_dict(weights)
+        current_weights = convert_to_torch_tensor(weights["current_weights"], device=self.device)
+        self.model.load_state_dict(current_weights)
+        self.set_custom_state_vars(weights["custom_state_vars"])
