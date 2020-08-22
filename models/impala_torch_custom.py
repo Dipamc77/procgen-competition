@@ -84,9 +84,9 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         x = input_dict["obs"].float()
         x = x / 255.0  # scale to 0-1
         x = x.permute(0, 3, 1, 2)  # NHWC => NCHW
-#         x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
-#         x = self.conv_seqs[0](x, pool=False)
-        x = self.conv_seqs[0](x, pool=True)
+        x = nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+        x = self.conv_seqs[0](x, pool=False)
+#        x = self.conv_seqs[0](x, pool=True)
         x = self.conv_seqs[1](x)
         x = self.conv_seqs[2](x)
         x = torch.flatten(x, start_dim=1)
