@@ -31,9 +31,13 @@ class FrameStackByChannels(Wrapper):
         self.stackedobs = np.tile(observation, self.num_stack)
         return self.stackedobs
     
+def maybe_framestack(config):
+    config_copy = config.copy()
+    fs = config_copy.pop('frame_stack')
+    if fs > 1:
+        return FrameStackByChannels(RewardMonitor(ProcgenEnvWrapper(config_copy)), fs)
+    else:
+        return RewardMonitor(ProcgenEnvWrapper(config_copy))
     
 # Register Env in Ray
-registry.register_env(
-    "frame_stacked_procgen",  # This should be different from procgen_env_wrapper
-    lambda config: FrameStackByChannels(RewardMonitor(ProcgenEnvWrapper(config)), 2)
-)
+registry.register_env("frame_stacked_procgen", maybe_framestack)

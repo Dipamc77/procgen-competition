@@ -249,13 +249,14 @@ class CustomTorchPolicy(TorchPolicy):
         if self.best_reward < mean_reward:
             self.best_reward = mean_reward
             self.best_weights = self.get_weights()["current_weights"]
+            
            
         if self.timesteps_total > self.target_timesteps or (self.time_elapsed + self.buffer_time) > self.max_time:
             if self.best_weights is not None:
                 self.set_model_weights(self.best_weights)
-            return True
-        else:
-            return False
+                return True
+            
+        return False
         
     def get_custom_state_vars(self):
         return {
