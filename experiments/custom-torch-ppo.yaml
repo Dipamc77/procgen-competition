@@ -65,20 +65,20 @@ procgen-ppo:
         model:
             custom_model: impala_torch_custom
             custom_options: 
-                depths: [32, 64, 64]
-                nlatents: 512
+                depths: [64, 128, 128]
+                nlatents: 1024
             
-#         evaluation_interval: 2
-#         evaluation_num_workers: 1
-#         evaluation_num_episodes: 3
-#         evaluation_config:
-#           num_envs_per_worker: 1
-#           env_config:
-#             render_mode: rgb_array
+        evaluation_interval: 2
+        evaluation_num_workers: 1
+        evaluation_num_episodes: 3
+        evaluation_config:
+          num_envs_per_worker: 1
+          env_config:
+            render_mode: rgb_array
 
-        num_workers: 4
+        num_workers: 0
 
-        num_envs_per_worker: 16
+        num_envs_per_worker: 64
 
         rollout_fragment_length: 256
 
