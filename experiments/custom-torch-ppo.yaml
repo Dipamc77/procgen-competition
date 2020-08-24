@@ -27,7 +27,7 @@ procgen-ppo:
 
         gamma: 0.9993
         lambda: 0.95
-        lr: 3.536e-4
+        lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
         sgd_minibatch_size: 1024 # 8 minibatches per epoch
@@ -49,7 +49,7 @@ procgen-ppo:
         retune_replay_size: 200000
         num_retunes: 0
         retune_epochs: 3
-        standardize_rewards: True
+        standardize_rewards: False
 
         normalize_actions: False
         clip_rewards: null
