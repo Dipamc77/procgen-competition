@@ -23,7 +23,7 @@ procgen-ppo:
             center_agent: True
             use_sequential_levels: False
             distribution_mode: easy
-            frame_stack: 2
+            frame_stack: 4
 
         gamma: 0.9993
         lambda: 0.95
@@ -47,7 +47,7 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 7
+        num_retunes: 0
         retune_epochs: 3
         standardize_rewards: False
 
@@ -77,7 +77,6 @@ procgen-ppo:
 #             render_mode: rgb_array
 
         num_workers: 4
-
         num_envs_per_worker: 16
 
         rollout_fragment_length: 256
