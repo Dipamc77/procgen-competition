@@ -23,14 +23,14 @@ procgen-ppo:
             center_agent: True
             use_sequential_levels: False
             distribution_mode: easy
-            frame_stack: 1
+            frame_stack: 2
 
-        gamma: 0.999
+        gamma: 0.9993
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
-        sgd_minibatch_size: 2048 # 8 minibatches per epoch
+        sgd_minibatch_size: 1024 # 8 minibatches per epoch
         train_batch_size: 16384 # 256 * 64
 #         train_batch_size: 18432 # 256 * 72
         vf_loss_coeff: 0.5
@@ -47,7 +47,7 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 14
+        num_retunes: 0
         retune_epochs: 3
         standardize_rewards: False
 
@@ -76,9 +76,9 @@ procgen-ppo:
           env_config:
             render_mode: rgb_array
 
-        num_workers: 0
+        num_workers: 4
 
-        num_envs_per_worker: 64
+        num_envs_per_worker: 16
 
         rollout_fragment_length: 256
 
