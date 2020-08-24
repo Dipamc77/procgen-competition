@@ -23,11 +23,11 @@ procgen-ppo:
             center_agent: True
             use_sequential_levels: False
             distribution_mode: easy
-            frame_stack: 4
+            frame_stack: 2
 
         gamma: 0.9993
         lambda: 0.95
-        lr: 5.0e-4
+        lr: 3.536e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
         sgd_minibatch_size: 2048 # 8 minibatches per epoch
@@ -49,7 +49,7 @@ procgen-ppo:
         retune_replay_size: 200000
         num_retunes: 0
         retune_epochs: 3
-        standardize_rewards: False
+        standardize_rewards: True
 
         normalize_actions: False
         clip_rewards: null
