@@ -27,10 +27,10 @@ procgen-ppo:
 
         gamma: 0.9993
         lambda: 0.95
-        lr: 5.0e-4
+        lr: 3.536e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
-        sgd_minibatch_size: 1024 # 8 minibatches per epoch
+        sgd_minibatch_size: 2048 # 8 minibatches per epoch
         train_batch_size: 16384 # 256 * 64
 #         train_batch_size: 18432 # 256 * 72
         vf_loss_coeff: 0.5
@@ -65,8 +65,9 @@ procgen-ppo:
         model:
             custom_model: impala_torch_custom
             custom_options: 
-                depths: [64, 128, 128]
-                nlatents: 1024
+                depths: [32, 64, 64]
+                nlatents: 512
+                init_glorot: True
             
         evaluation_interval: 2
         evaluation_num_workers: 1
