@@ -29,7 +29,7 @@ procgen-ppo:
         lambda: 0.95
         lr: 3.536e-4
         # Number of SGD iterations in each outer loop
-        num_sgd_iter: 5
+        num_sgd_iter: 3
         sgd_minibatch_size: 2048 # 8 minibatches per epoch
         train_batch_size: 16384 # 256 * 64
 #         train_batch_size: 18432 # 256 * 72
@@ -67,7 +67,7 @@ procgen-ppo:
             custom_options: 
                 depths: [32, 64, 64]
                 nlatents: 512
-                init_glorot: False
+                init_glorot: True
             
         evaluation_interval: 2
         evaluation_num_workers: 1
