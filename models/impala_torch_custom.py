@@ -14,9 +14,9 @@ class ResidualBlock(nn.Module):
         self.conv1 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
         if init_glorot:
             nn.init.xavier_uniform_(self.conv0.weight)
-#             nn.init.zeros_(self.conv0.bias)
+            nn.init.zeros_(self.conv0.bias)
             nn.init.xavier_uniform_(self.conv1.weight)
-#             nn.init.zeros_(self.conv1.bias)
+            nn.init.zeros_(self.conv1.bias)
 
     
     def forward(self, x):
@@ -38,7 +38,7 @@ class ConvSequence(nn.Module):
         self.res_block1 = ResidualBlock(self._out_channels, init_glorot)
         if init_glorot:
             nn.init.xavier_uniform_(self.conv.weight)
-#             nn.init.zeros_(self.conv.bias)
+            nn.init.zeros_(self.conv.bias)
 
     def forward(self, x, pool=True):
         x = self.conv(x)
@@ -85,14 +85,14 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         self.hidden_fc = nn.Linear(in_features=shape[0] * shape[1] * shape[2], out_features=nlatents)
         if init_glorot:
             nn.init.xavier_uniform_(self.hidden_fc.weight)
-#             nn.init.zeros_(self.hidden_fc.bias)
+            nn.init.zeros_(self.hidden_fc.bias)
         self.pi_fc = nn.Linear(in_features=nlatents, out_features=num_outputs)
         nn.init.orthogonal_(self.pi_fc.weight, gain=0.01)
-#         nn.init.zeros_(self.pi_fc.bias)
+        nn.init.zeros_(self.pi_fc.bias)
         self.value_fc = nn.Linear(in_features=nlatents, out_features=1)
         nn.init.orthogonal_(self.value_fc.weight, gain=1)
-#         nn.init.zeros_(self.value_fc.bias)
-#         self.layernorm = nn.LayerNorm(nlatents)
+        nn.init.zeros_(self.value_fc.bias)
+        self.layernorm = nn.LayerNorm(nlatents)
 
     
     @override(TorchModelV2)
@@ -106,9 +106,8 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         x = torch.flatten(x, start_dim=1)
         x = nn.functional.relu(x)
         x = self.hidden_fc(x)
-#         x = self.layernorm(x)
-#         x = torch.tanh(x)
-        x = nn.functional.relu(x)
+        x = self.layernorm(x)
+        x = torch.tanh(x)
         logits = self.pi_fc(x)
         value = self.value_fc(x)
         self._value = value.squeeze(1)
