@@ -8,7 +8,7 @@ procgen-ppo:
 
 
     # === Settings for Checkpoints ===
-    checkpoint_freq: 1
+    checkpoint_freq: 100
     checkpoint_at_end: True
     keep_checkpoints_num: 5
 
@@ -65,8 +65,8 @@ procgen-ppo:
         model:
             custom_model: impala_torch_custom
             custom_options: 
-                depths: [32, 64, 64]
-                nlatents: 512
+                depths: [64, 128, 128]
+                nlatents: 1024
                 init_glorot: True
             
         evaluation_interval: 2
@@ -77,8 +77,8 @@ procgen-ppo:
           env_config:
             render_mode: rgb_array
 
-        num_workers: 4
-        num_envs_per_worker: 16
+        num_workers: 2
+        num_envs_per_worker: 32
 
         rollout_fragment_length: 256
 
