@@ -8,7 +8,7 @@ procgen-ppo:
 
 
     # === Settings for Checkpoints ===
-    checkpoint_freq: 100
+    checkpoint_freq: 1
     checkpoint_at_end: True
     keep_checkpoints_num: 5
 
@@ -27,7 +27,7 @@ procgen-ppo:
 
         gamma: 0.9993
         lambda: 0.95
-        lr: 3.536e-4
+        lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
         sgd_minibatch_size: 2048 # 8 minibatches per epoch

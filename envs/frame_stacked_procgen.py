@@ -22,7 +22,7 @@ class FrameStackByChannels(Wrapper):
 
     def step(self, action):
         observation, reward, done, info = self.env.step(action)
-        self.stackedobs = np.roll(self.stackedobs, shift=-1, axis=-1)
+        self.stackedobs = np.roll(self.stackedobs, shift=-observation.shape[-1], axis=-1)
         self.stackedobs[...,-observation.shape[-1]:] = observation
         return self.stackedobs, reward, done, info
 
