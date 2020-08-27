@@ -25,7 +25,7 @@ procgen-ppo:
             distribution_mode: easy
             frame_stack: 2
 
-        gamma: 0.9993
+        gamma: 0.998
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
@@ -47,7 +47,7 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 10
+        num_retunes: 0
         retune_epochs: 2
         standardize_rewards: False
 
