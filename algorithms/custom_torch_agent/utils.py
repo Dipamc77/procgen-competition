@@ -70,6 +70,24 @@ def random_cutout_color(imgs, min_cut, max_cut):
         cutouts[i] = cut_img
     return cutouts
 
+def horizon_to_gamma(horizon):
+    return 1.0 - 1.0/horizon
+
+class AdaptiveDiscountTuner:
+    def __init__(self, gamma, momentum=0.98, eplenmult=3, hmax=2000, hmin=200):
+        self.gamma = gamma
+        self.gmax = horizon_to_gamma(hmax)
+        self.gmin = horizon_to_gamma(hmin)
+        self.momentum = momentum
+        self.eplenmult = eplenmult
+        
+    def update(self, eplen):
+        if eplen > 0:
+            htarg = eplen * self.eplenmult
+            gtarg = horizon_to_gamma(htarg)
+            self.gamma = self.gamma * self.momentum + gtarg * (1-self.momentum)
+        return self.gamma
+
 class RetuneSelector:
     def __init__(self, nbatch, ob_space, ac_space, skips = 800_000, replay_size = 200_000, num_retunes = 5):
         self.skips = skips + (-skips) % nbatch

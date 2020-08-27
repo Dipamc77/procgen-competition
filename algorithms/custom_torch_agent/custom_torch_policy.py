@@ -62,6 +62,9 @@ class CustomTorchPolicy(TorchPolicy):
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
         self.max_time = 7200
+        self.eplength_deque = deque(maxlen=100)
+        self.gamma = self.config['gamma']
+        self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
 
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -95,7 +98,7 @@ class CustomTorchPolicy(TorchPolicy):
          
         ## Config data values
         nbatch_train = self.config['sgd_minibatch_size']
-        gamma, lam = self.config['gamma'], self.config['lambda']
+        gamma, lam = self.gamma, self.config['lambda']
         nsteps = self.config['rollout_fragment_length']
         nenvs = nbatch//nsteps
         ts = (nenvs, nsteps)
@@ -155,6 +158,7 @@ class CustomTorchPolicy(TorchPolicy):
                 slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs))
                 self._batch_train(lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
         
+        self.update_gamma(samples)
         self.update_batch_time()
         return {}
 
@@ -262,6 +266,11 @@ class CustomTorchPolicy(TorchPolicy):
                 return True
             
         return False
+    
+    def update_gamma(self, samples):
+        eplens = [info['episode']['l'] for info in samples['infos'] if 'episode' in info]
+        mean_eplen = safe_mean(eplens) if len(eplens) >= 100 else safe_mean(self.eplength_deque)
+        self.gamma = self.adaptive_discount_tuner.update(mean_eplen)
         
     def get_custom_state_vars(self):
         return {
@@ -271,6 +280,7 @@ class CustomTorchPolicy(TorchPolicy):
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
             "num_retunes": self.retune_selector.num_retunes,
+            "gamma": self.gamma,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -280,6 +290,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
         self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
+        self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
     
     @override(TorchPolicy)
     def get_weights(self):
