@@ -47,8 +47,8 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 0
-        retune_epochs: 3
+        num_retunes: 10
+        retune_epochs: 2
         standardize_rewards: False
 
         normalize_actions: False
@@ -65,9 +65,9 @@ procgen-ppo:
         model:
             custom_model: impala_torch_custom
             custom_options: 
-                depths: [64, 128, 128]
-                nlatents: 1024
-                init_glorot: True
+                depths: [32, 64, 64]
+                nlatents: 512
+                init_glorot: False
             
         evaluation_interval: 2
         evaluation_num_workers: 1

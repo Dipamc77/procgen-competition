@@ -1,6 +1,7 @@
 import numpy as np
 from ray.rllib.utils import try_import_torch
 from collections import deque
+from skimage.util import view_as_windows
 
 torch, nn = try_import_torch()
 
@@ -29,8 +30,7 @@ def unroll(arr, targetshape):
 def safe_mean(xs):
     return -np.inf if len(xs) == 0 else np.mean(xs)
 
-from skimage.util import view_as_windows
-import numpy as np
+
 def pad_and_random_crop(imgs, out, pad):
     """
     Vectorized pad and random crop
@@ -55,6 +55,20 @@ def pad_and_random_crop(imgs, out, pad):
     cropped = cropped.transpose(0,2,3,1)
     return cropped
 
+def random_cutout_color(imgs, min_cut, max_cut):
+    n, h, w, c = imgs.shape
+    w1 = np.random.randint(min_cut, max_cut, n)
+    h1 = np.random.randint(min_cut, max_cut, n)
+    
+    cutouts = np.empty((n, h, w, c), dtype=imgs.dtype)
+    rand_box = np.random.randint(0, 255, size=(n, c), dtype=imgs.dtype)
+    for i, (img, w11, h11) in enumerate(zip(imgs, w1, h1)):
+        cut_img = img.copy()
+        # add random box
+        cut_img[h11:h11 + h11, w11:w11 + w11, :] = rand_box[i]
+        
+        cutouts[i] = cut_img
+    return cutouts
 
 class RetuneSelector:
     def __init__(self, nbatch, ob_space, ac_space, skips = 800_000, replay_size = 200_000, num_retunes = 5):
