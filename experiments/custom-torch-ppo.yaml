@@ -1,7 +1,7 @@
 procgen-ppo:
     env: frame_stacked_procgen
     run: CustomTorchPPOAgent
-#     disable_evaluation_worker: True
+    disable_evaluation_worker: True
     # === Stop Conditions ===
     stop:
         timesteps_total: 8000000
@@ -31,7 +31,7 @@ procgen-ppo:
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
-        sgd_minibatch_size: 2048 # ##### Also check "accumulate_train_batches"
+        sgd_minibatch_size: 1024 # ##### Also check "accumulate_train_batches"
         train_batch_size: 16384 # 256 * 64
 #         train_batch_size: 18432 # 256 * 72
         vf_loss_coeff: 0.5
@@ -48,10 +48,10 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 6
+        num_retunes: 3
         retune_epochs: 3
-        standardize_rewards: True
-        accumulate_train_batches: 1
+        standardize_rewards: False
+        accumulate_train_batches: 2
         adaptive_gamma: False
 
         normalize_actions: False
@@ -68,19 +68,11 @@ procgen-ppo:
         model:
             custom_model: impala_torch_custom
             custom_options: 
-#                 depths: [64, 128, 128]
-#                 nlatents: 1024
-                depths: [32, 64, 64]
-                nlatents: 512
+                depths: [64, 128, 128]
+                nlatents: 1024
+#                 depths: [32, 64, 64]
+#                 nlatents: 512
                 init_glorot: False
-            
-#         evaluation_interval: 2
-#         evaluation_num_workers: 1
-#         evaluation_num_episodes: 3
-#         evaluation_config:
-#           num_envs_per_worker: 1
-#           env_config:
-#             render_mode: rgb_array
 
         num_workers: 4
         num_envs_per_worker: 16

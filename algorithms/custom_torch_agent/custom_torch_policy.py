@@ -238,7 +238,7 @@ class CustomTorchPolicy(TorchPolicy):
     def tune_policy(self, apply_grad, obs, target_vf, target_pi, retune_vf_loss_coeff):
 #         obs_aug = self.to_tensor(pad_and_random_crop(obs, 64, 10))
         obs_aug = np.empty(obs.shape, obs.dtype)
-        aug_idx = np.random.randint(2, size=len(obs))
+        aug_idx = np.random.randint(3, size=len(obs))
         obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
         obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
         obs_aug = self.to_tensor(obs_aug)
