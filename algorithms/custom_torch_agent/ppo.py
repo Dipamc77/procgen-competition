@@ -75,6 +75,8 @@ DEFAULT_CONFIG = with_common_config({
     "num_retunes": 6,
     "retune_epochs": 3,
     "standardize_rewards": False,
+    "accumulate_train_batches": 1,
+    "adaptive_gamma": False, 
 })
 # __sphinx_doc_end__
 # yapf: enable
