@@ -1,0 +1,144 @@
+procgen-ppo:
+    env: frame_stacked_procgen
+    run: DQN
+    # === Stop Conditions ===
+    stop:
+        timesteps_total: 8000000
+        time_total_s: 7200
+
+
+    # === Settings for Checkpoints ===
+    checkpoint_freq: 100
+    checkpoint_at_end: True
+    keep_checkpoints_num: 5
+
+    config:
+        # === Settings for the Procgen Environment ===
+        env_config:
+            env_name: bigfish
+            num_levels: 0
+            start_level: 0
+            paint_vel_info: False
+            use_generated_assets: False
+            center_agent: True
+            use_sequential_levels: False
+            distribution_mode: easy
+            frame_stack: 2
+
+        num_atoms: 51
+        v_min: 0.0
+        v_max: 41.0
+        noisy: True
+        # control the initial value of noisy nets
+        sigma0: 0.5
+        dueling: True
+        # Dense-layer setup for each the advantage branch and the value branch
+        # in a dueling architecture.
+        hiddens: [512]
+        double_q: True
+        n_step: 3
+
+        # === Exploration Settings (Experimental) ===
+        exploration_config: {
+            # The Exploration class to use.
+            type": EpsilonGreedy,
+            # Config for the Exploration class' constructor:
+            initial_epsilon: 1.0,
+            final_epsilon: 0.02,
+            epsilon_timesteps: 8000000,  # Timesteps over which to anneal epsilon.
+       }
+
+        # Minimum env steps to optimize for per train call. This value does
+        # not affect learning, only the length of iterations.
+        timesteps_per_iteration: 1000
+        # Update the target network every `target_network_update_freq` steps.
+        target_network_update_freq: 500
+        # === Replay buffer ===
+        # Size of the replay buffer. Note that if async_updates is set, then
+        # each worker will have a replay buffer of this size.
+        buffer_size: 50000
+        # If True prioritized replay buffer will be used.
+        prioritized_replay: True
+        # Alpha parameter for prioritized replay buffer.
+        prioritized_replay_alpha: 0.6
+        # Beta parameter for sampling from prioritized replay buffer.
+        prioritized_replay_beta: 0.4
+        # Final value of beta (by default, we use constant beta=0.4).
+        final_prioritized_replay_beta: 0.4
+        # Time steps over which the beta parameter is annealed.
+        prioritized_replay_beta_annealing_timesteps: 20000
+        # Epsilon to add to the TD errors when updating priorities.
+        prioritized_replay_eps: 1e-6
+        # Whether to LZ4 compress observations
+        compress_observations: False
+
+        # === Optimization ===
+        # Learning rate for adam optimizer
+        lr: 2.5e-4
+        # If not None, clip gradients during optimization at this value
+        grad_clip: 40
+        # How many steps of the model to sample before learning starts.
+        learning_starts: 32000
+        # Update the replay buffer with this many samples at once. Note that
+        # this setting applies per-worker if num_workers > 1.
+        rollout_fragment_length: 128
+        # Size of a batch sampled from replay buffer for training. Note that
+        # if async_updates is set, then each worker returns gradients for a
+        # batch of this size.
+        train_batch_size: 1024
+
+        # === Parallelism ===
+        # Number of workers for collecting samples with. This only makes sense
+        # to increase if your environment is particularly slow to sample, or if
+        # youre using the Async or Ape-X optimizers.
+        num_workers: 4
+        # Whether to compute priorities on workers.
+        worker_side_prioritization: False
+        # Prevent iterations from going lower than this time span
+        min_iter_time_s: 1
+
+        normalize_actions: False
+        clip_rewards: null
+        clip_actions: True
+        preprocessor_pref: deepmind
+
+        ignore_worker_failures: False
+        log_sys_usage: True
+
+        use_pytorch: True
+
+        # === Settings for Model ===
+        model:
+            custom_model: impala_torch_custom
+            custom_options: 
+                depths: [32, 64, 64]
+                nlatents: 512
+                init_glorot: True
+            
+        evaluation_interval: 2
+        evaluation_num_workers: 1
+        evaluation_num_episodes: 3
+        evaluation_config:
+          num_envs_per_worker: 1
+          explore: False
+          env_config:
+            render_mode: rgb_array
+
+        num_envs_per_worker: 16
+
+        # Whether to rollout "complete_episodes" or "truncate_episodes" to
+        batch_mode: truncate_episodes
+
+        num_cpus_per_worker: 1
+        num_gpus_per_worker: 0.1
+        num_cpus_for_driver: 1
+        
+        # Number of GPUs to allocate to the trainer process. Note that not all
+        num_gpus: 0.3
+
+        observation_filter: "NoFilter"
+        synchronize_filters: True
+        compress_observations: False
+        timesteps_per_iteration: 0
+        seed: null
+        
