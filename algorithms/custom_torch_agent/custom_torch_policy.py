@@ -159,7 +159,7 @@ class CustomTorchPolicy(TorchPolicy):
                 mbinds = inds[start:end]
                 slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs))
                 optim_count += 1
-                apply_grad = optim_count % accumulate_train_batches
+                apply_grad = (optim_count % accumulate_train_batches) == 0
                 self._batch_train(apply_grad, lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
                
         if self.config['adaptive_gamma']:
@@ -227,7 +227,7 @@ class CustomTorchPolicy(TorchPolicy):
                 end = start + nbatch_train
                 mbinds = inds[start:end]
                 optim_count += 1
-                apply_grad = optim_count % accumulate_train_batches
+                apply_grad = (optim_count % accumulate_train_batches) == 0
                 slices = [self.retune_selector.exp_replay[mbinds], 
                           self.to_tensor(replay_vf[mbinds]), 
                           self.to_tensor(replay_pi[mbinds])]
