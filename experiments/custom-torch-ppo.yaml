@@ -26,7 +26,7 @@ procgen-ppo:
             distribution_mode: easy
             frame_stack: 2
 
-        gamma: 0.996
+        gamma: 0.992
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
@@ -54,7 +54,7 @@ procgen-ppo:
         accumulate_train_batches: 1
         adaptive_gamma: False
         final_lr: 1.0e-4
-        lr_schedule: True
+        lr_schedule: False
         final_entropy_coeff: 0.002
         entropy_schedule: False
 
