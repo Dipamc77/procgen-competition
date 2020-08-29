@@ -62,9 +62,12 @@ class CustomTorchPolicy(TorchPolicy):
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
         self.max_time = 7200
-        self.eplength_deque = deque(maxlen=100)
+        self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
+        self.max_reward = EASY_GAME_RANGES[self.config['env_config']['env_name']][1]
+        self.lr = config['lr']
+        self.ent_coef = config['entropy_coeff']
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -138,9 +141,9 @@ class CustomTorchPolicy(TorchPolicy):
         
         ## Data from config
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
-        lrnow = self.config['lr']
+        lrnow = self.lr
         max_grad_norm = self.config['grad_clip']
-        ent_coef, vf_coef = self.config['entropy_coeff'], self.config['vf_loss_coeff']
+        ent_coef, vf_coef = self.ent_coef, self.config['vf_loss_coeff']
         
         neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
         actions = samples['actions']
@@ -162,8 +165,10 @@ class CustomTorchPolicy(TorchPolicy):
                 apply_grad = (optim_count % accumulate_train_batches) == 0
                 self._batch_train(apply_grad, lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
                
-        if self.config['adaptive_gamma']:
-            self.update_gamma(samples)
+        self.update_gamma(samples)
+        self.update_lr()
+        self.update_ent_coef()
+            
         self.update_batch_time()
         return {}
 
@@ -241,6 +246,7 @@ class CustomTorchPolicy(TorchPolicy):
         aug_idx = np.random.randint(3, size=len(obs))
         obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
         obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
+        obs_aug[aug_idx == 2] = obs[aug_idx == 2]
         obs_aug = self.to_tensor(obs_aug)
         with torch.no_grad():
             tpi_log_softmax = nn.functional.log_softmax(target_pi, dim=1)
@@ -278,10 +284,28 @@ class CustomTorchPolicy(TorchPolicy):
             
         return False
     
+    def update_lr(self):
+        if self.config['lr_schedule']:
+            self.lr = linear_schedule(initial_val=self.config['lr'], 
+                                      final_val=self.config['final_lr'], 
+                                      current_steps=self.timesteps_total, 
+                                      total_steps=self.target_timesteps)
+    
+    def update_ent_coef(self):
+        if self.config['entropy_schedule']:
+            self.ent_coef = linear_schedule(initial_val=self.config['entropy_coeff'], 
+                                            final_val=self.config['final_entropy_coeff'], 
+                                            current_steps=self.timesteps_total, 
+                                            total_steps=self.target_timesteps)
+    
     def update_gamma(self, samples):
-        eplens = [info['episode']['l'] for info in samples['infos'] if 'episode' in info]
-        mean_eplen = safe_mean(eplens) if len(eplens) >= 100 else safe_mean(self.eplength_deque)
-        self.gamma = self.adaptive_discount_tuner.update(mean_eplen)
+        if self.config['adaptive_gamma']:
+            epinfobuf = [info['episode'] for info in samples['infos'] if 'episode' in info]
+            self.maxrewep_lenbuf.extend([epinfo['l'] for epinfo in epinfobuf if epinfo['r'] >= self.max_reward])
+            sorted_nth = lambda buf, n: np.nan if len(buf) < 100 else sorted(self.maxrewep_lenbuf.copy())[n]
+            target_horizon = sorted_nth(self.maxrewep_lenbuf, 80)
+            self.gamma = self.adaptive_discount_tuner.update(target_horizon)
+
         
     def get_custom_state_vars(self):
         return {
@@ -292,6 +316,9 @@ class CustomTorchPolicy(TorchPolicy):
             "batch_end_time": self.batch_end_time,
             "num_retunes": self.retune_selector.num_retunes,
             "gamma": self.gamma,
+            "maxrewep_lenbuf": self.maxrewep_lenbuf,
+            "lr": self.lr,
+            "ent_coef": self.ent_coef,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -302,6 +329,9 @@ class CustomTorchPolicy(TorchPolicy):
         self.batch_end_time = custom_state_vars["batch_end_time"]
         self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
+        self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
+        self.lr =custom_state_vars["lr"]
+        self.ent_coef =custom_state_vars["ent_coef"]
     
     @override(TorchPolicy)
     def get_weights(self):

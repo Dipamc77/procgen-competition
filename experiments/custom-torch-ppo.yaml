@@ -53,6 +53,10 @@ procgen-ppo:
         standardize_rewards: False
         accumulate_train_batches: 1
         adaptive_gamma: False
+        final_lr: 1.0e-4
+        lr_schedule: True
+        final_entropy_coeff: 0.002
+        entropy_schedule: False
 
         normalize_actions: False
         clip_rewards: null
