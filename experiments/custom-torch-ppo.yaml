@@ -26,7 +26,7 @@ procgen-ppo:
             distribution_mode: easy
             frame_stack: 2
 
-        gamma: 0.998
+        gamma: 0.996
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
