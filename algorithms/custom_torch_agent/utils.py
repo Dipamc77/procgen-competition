@@ -195,4 +195,5 @@ EASY_GAME_RANGES = {
     'plunder': [4.5, 30],
     'ninja': [3.5, 10],
     'bossfight': [.5, 13],
+    'caterpillar': [8.25, 24],
 }
