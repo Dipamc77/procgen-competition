@@ -77,6 +77,10 @@ DEFAULT_CONFIG = with_common_config({
     "standardize_rewards": False,
     "accumulate_train_batches": 1,
     "adaptive_gamma": False, 
+    "final_lr": 1e-4,
+    "lr_schedule": True,
+    "final_entropy_coeff": 0.002,
+    "entropy_schedule": True,
 })
 # __sphinx_doc_end__
 # yapf: enable
