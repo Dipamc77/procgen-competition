@@ -52,7 +52,7 @@ procgen-ppo:
         retune_epochs: 3
         standardize_rewards: True
         accumulate_train_batches: 1
-        adaptive_gamma: False
+        adaptive_gamma: True
         final_lr: 2.0e-4
         lr_schedule: True
         final_entropy_coeff: 0.002
