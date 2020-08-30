@@ -65,7 +65,10 @@ class CustomTorchPolicy(TorchPolicy):
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
-        self.max_reward = EASY_GAME_RANGES[self.config['env_config']['env_name']][1]
+        try:
+            self.max_reward = EASY_GAME_RANGES[self.config['env_config']['env_name']][1]
+        except:
+            self.max_reward = 24.0 # Hardcoding caterpillar max reward for now
         self.lr = config['lr']
         self.ent_coef = config['entropy_coeff']
         
