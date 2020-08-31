@@ -50,7 +50,7 @@ procgen-ppo:
         retune_replay_size: 200000
         num_retunes: 8
         retune_epochs: 3
-        standardize_rewards: True
+        standardize_rewards: False
         accumulate_train_batches: 1
         adaptive_gamma: False
         final_lr: 1.0e-4
