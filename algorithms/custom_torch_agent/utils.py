@@ -176,24 +176,3 @@ def update_mean_var_count_from_moments(mean, var, count, batch_mean, batch_var, 
     new_count = tot_count
 
     return new_mean, new_var, new_count
-
-
-EASY_GAME_RANGES = {
-    'coinrun': [5, 10],
-    'starpilot': [2.5, 64],
-    'caveflyer': [3.5, 12],
-    'dodgeball': [1.5, 19],
-    'fruitbot': [-1.5, 32.4],
-    'chaser': [.5, 13],
-    'miner': [1.5, 13],
-    'jumper': [1, 10],
-    'leaper': [1.5, 10],
-    'maze': [5, 10],
-    'bigfish': [1, 40],
-    'heist': [3.5, 10],
-    'climber': [2, 12.6],
-    'plunder': [4.5, 30],
-    'ninja': [3.5, 10],
-    'bossfight': [.5, 13],
-    'caterpillar': [8.25, 24],
-}

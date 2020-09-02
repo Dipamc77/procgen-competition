@@ -45,8 +45,8 @@ class CustomTorchPolicy(TorchPolicy):
 
         self.framework = "torch"
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-        self.rewnorm = RewardNormalizer(cliprew=25.0) ## TODO: Might need to go to custom state
-        
+        cliprew = self.config['env_config']['return_max']
+        self.rewnorm = RewardNormalizer(cliprew=cliprew) ## TODO: Might need to go to custom state
         self.reward_deque = deque(maxlen=100)
         self.best_reward = -np.inf
         self.best_weights = None
@@ -65,10 +65,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
-        try:
-            self.max_reward = EASY_GAME_RANGES[self.config['env_config']['env_name']][1]
-        except:
-            self.max_reward = 24.0 # Hardcoding caterpillar max reward for now
+        self.max_reward = 0
         self.lr = config['lr']
         self.ent_coef = config['entropy_coeff']
         
