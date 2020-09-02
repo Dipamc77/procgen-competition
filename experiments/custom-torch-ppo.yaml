@@ -25,6 +25,9 @@ procgen-ppo:
             use_sequential_levels: False
             distribution_mode: easy
             frame_stack: 2
+            return_min: 0
+            return_blind: 1
+            return_max: 40
 
         gamma: 0.996
         lambda: 0.95
@@ -48,9 +51,9 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 13
-        retune_epochs: 2
-        standardize_rewards: False
+        num_retunes: 8
+        retune_epochs: 3
+        standardize_rewards: True
         accumulate_train_batches: 1
         adaptive_gamma: False
         final_lr: 2.0e-4

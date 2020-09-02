@@ -45,8 +45,8 @@ class CustomTorchPolicy(TorchPolicy):
 
         self.framework = "torch"
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
-        cliprew = self.config['env_config']['return_max']
-        self.rewnorm = RewardNormalizer(cliprew=cliprew) ## TODO: Might need to go to custom state
+        self.max_reward = self.config['env_config']['return_max']
+        self.rewnorm = RewardNormalizer(cliprew=self.max_reward) ## TODO: Might need to go to custom state
         self.reward_deque = deque(maxlen=100)
         self.best_reward = -np.inf
         self.best_weights = None
@@ -65,7 +65,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
-        self.max_reward = 0
+        
         self.lr = config['lr']
         self.ent_coef = config['entropy_coeff']
         
@@ -319,6 +319,7 @@ class CustomTorchPolicy(TorchPolicy):
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
             "ent_coef": self.ent_coef,
+            "rewnorm": self.rewnorm,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -331,7 +332,8 @@ class CustomTorchPolicy(TorchPolicy):
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
-        self.ent_coef =custom_state_vars["ent_coef"]
+        self.ent_coef = custom_state_vars["ent_coef"]
+        self.rewnorm = custom_state_vars["rewnorm"]
     
     @override(TorchPolicy)
     def get_weights(self):
