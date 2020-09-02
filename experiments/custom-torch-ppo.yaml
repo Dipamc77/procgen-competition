@@ -1,7 +1,7 @@
 procgen-ppo:
     env: frame_stacked_procgen
     run: CustomTorchPPOAgent
-#     disable_evaluation_worker: True
+    disable_evaluation_worker: True
     # === Stop Conditions ===
     stop:
         timesteps_total: 8000000
