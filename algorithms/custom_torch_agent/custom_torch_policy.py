@@ -200,6 +200,8 @@ class CustomTorchPolicy(TorchPolicy):
         pg_loss = torch.mean(torch.max(pg_losses1, pg_losses2))
 
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
+        
+        loss = loss / self.config['accumulate_train_batches']
 
         loss.backward()
         if apply_grad:
@@ -257,7 +259,9 @@ class CustomTorchPolicy(TorchPolicy):
         # kl_div in torch 1.3.1 has numerical issues
         pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) 
         vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
+        
         loss = retune_vf_loss_coeff * vf_loss + pi_loss
+        loss = loss / self.config['accumulate_train_batches']
         
         loss.backward()
         if apply_grad:

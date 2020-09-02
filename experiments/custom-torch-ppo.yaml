@@ -1,7 +1,7 @@
 procgen-ppo:
     env: frame_stacked_procgen
     run: CustomTorchPPOAgent
-    disable_evaluation_worker: True
+#     disable_evaluation_worker: True
     # === Stop Conditions ===
     stop:
         timesteps_total: 8000000
@@ -34,7 +34,7 @@ procgen-ppo:
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
-        sgd_minibatch_size: 2048 # ##### Also check "accumulate_train_batches"
+        sgd_minibatch_size: 1024 # ##### Also check "accumulate_train_batches"
         train_batch_size: 16384 # 256 * 64
 #         train_batch_size: 18432 # 256 * 72
         vf_loss_coeff: 0.5
@@ -51,12 +51,12 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 8
+        num_retunes: 5
         retune_epochs: 3
         standardize_rewards: True
-        accumulate_train_batches: 1
+        accumulate_train_batches: 2
         adaptive_gamma: False
-        final_lr: 2.0e-4
+        final_lr: 1.0e-4
         lr_schedule: True
         final_entropy_coeff: 0.002
         entropy_schedule: False
@@ -75,10 +75,10 @@ procgen-ppo:
         model:
             custom_model: impala_torch_custom
             custom_options: 
-#                 depths: [64, 128, 128]
-#                 nlatents: 1024
-                depths: [32, 64, 64]
-                nlatents: 512
+                depths: [64, 128, 128]
+                nlatents: 1024
+#                 depths: [32, 64, 64]
+#                 nlatents: 512
                 init_glorot: False
 
         num_workers: 4
@@ -93,18 +93,11 @@ procgen-ppo:
         num_gpus_per_worker: 0.1
         num_cpus_for_driver: 1
         
-        # Number of GPUs to allocate to the trainer process. Note that not all
         num_gpus: 0.3
 
         explore: True,
         exploration_config:
-            # The Exploration class to use. In the simplest case, this is the name
-            # (str) of any class present in the `rllib.utils.exploration` package.
-            # You can also provide the python class directly or the full location
-            # of your class (e.g. "ray.rllib.utils.exploration.epsilon_greedy.
-            # EpsilonGreedy)
             type: "StochasticSampling"
-            # Can add constructor kwargs here (if any)
 
         observation_filter: "NoFilter"
         synchronize_filters: True
