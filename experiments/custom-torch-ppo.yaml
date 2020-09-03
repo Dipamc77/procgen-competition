@@ -34,9 +34,10 @@ procgen-ppo:
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
-        sgd_minibatch_size: 2048 # ##### Also check "accumulate_train_batches"
-        train_batch_size: 16384 # 256 * 64
-#         train_batch_size: 18432 # 256 * 72
+#         sgd_minibatch_size: 2048 # ##### Also check "accumulate_train_batches"
+        sgd_minibatch_size: 1792
+#         train_batch_size: 16384 # 256 * 64
+        train_batch_size: 14336 # 256 * 60
         vf_loss_coeff: 0.5
         entropy_coeff: 0.01
         clip_param: 0.2
@@ -51,7 +52,7 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 6
+        num_retunes: 8
         retune_epochs: 3
         standardize_rewards: True
         accumulate_train_batches: 1
@@ -80,10 +81,10 @@ procgen-ppo:
                 depths: [32, 64, 64]
                 nlatents: 512
                 init_glorot: False
-                use_layernorm: False
+                use_layernorm: True
 
-        num_workers: 4
-        num_envs_per_worker: 16
+        num_workers: 7
+        num_envs_per_worker: 9
 
         rollout_fragment_length: 256
 
