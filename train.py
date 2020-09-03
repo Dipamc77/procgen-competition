@@ -151,6 +151,7 @@ def run(args, parser):
     if args.config_file:
         with open(args.config_file) as f:
             experiments = yaml.safe_load(f)
+            experiments['procgen-ppo'].pop('disable_evaluation_worker')
     else:
         # Note: keep this in sync with tune/config_parser.py
         experiments = {
