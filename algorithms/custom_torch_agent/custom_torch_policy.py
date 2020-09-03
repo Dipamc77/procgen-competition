@@ -53,8 +53,10 @@ class CustomTorchPolicy(TorchPolicy):
         self.time_elapsed = 0
         self.batch_end_time = time.time()
         self.timesteps_total = 0
-        nbatch = self.config['train_batch_size']
-        self.retune_selector = RetuneSelector(nbatch, observation_space, action_space, 
+        nw = self.config['num_workers'] if self.config['num_workers'] > 0 else 1
+        self.nbatch = nw * self.config['num_envs_per_worker'] * self.config['rollout_fragment_length']
+        assert self.nbatch % self.config['sgd_minibatch_size'] == 0, "SGD Minibatch Size should exactly divide NUM_ENV * NUM_WORKERS * ROLLOUT_LENGTH"
+        self.retune_selector = RetuneSelector(self.nbatch, observation_space, action_space, 
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
@@ -85,7 +87,7 @@ class CustomTorchPolicy(TorchPolicy):
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
         
-        nbatch = len(samples['dones'])
+        nbatch = self.nbatch
         should_skip_train_step = self.best_reward_model_select(samples)
         if should_skip_train_step:
             self.update_batch_time()
@@ -269,8 +271,7 @@ class CustomTorchPolicy(TorchPolicy):
             self.optimizer.zero_grad()
         
     def best_reward_model_select(self, samples):
-        nbatch = len(samples['dones'])
-        self.timesteps_total += nbatch
+        self.timesteps_total += self.nbatch
         
         ## Best reward model selection
         eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
