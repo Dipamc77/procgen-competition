@@ -55,7 +55,10 @@ class CustomTorchPolicy(TorchPolicy):
         self.timesteps_total = 0
         nw = self.config['num_workers'] if self.config['num_workers'] > 0 else 1
         self.nbatch = nw * self.config['num_envs_per_worker'] * self.config['rollout_fragment_length']
-        assert self.nbatch % self.config['sgd_minibatch_size'] == 0, "SGD Minibatch Size should exactly divide NUM_ENV * NUM_WORKERS * ROLLOUT_LENGTH"
+        if self.nbatch % self.config['sgd_minibatch_size'] != 0:
+            print("########################################################################################")
+            print("WARNING: SGD Minibatch Size should exactly divide NUM_ENV * NUM_WORKERS * ROLLOUT_LENGTH")
+            print("########################################################################################")
         self.retune_selector = RetuneSelector(self.nbatch, observation_space, action_space, 
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
