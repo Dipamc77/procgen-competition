@@ -16,7 +16,7 @@ procgen-ppo:
     config:
         # === Settings for the Procgen Environment ===
         env_config:
-            env_name: bigfish
+            env_name: coinrun
             num_levels: 0
             start_level: 0
             paint_vel_info: False
@@ -27,14 +27,13 @@ procgen-ppo:
             frame_stack: 2
             return_min: 0
             return_blind: 1
-            return_max: 40
+            return_max: 10
 
         gamma: 0.996
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
         num_sgd_iter: 3
-        sgd_minibatch_size: 2048 ##### Also check "accumulate_train_batches"
         vf_loss_coeff: 0.5
         entropy_coeff: 0.01
         clip_param: 0.2
@@ -52,12 +51,16 @@ procgen-ppo:
         num_retunes: 8
         retune_epochs: 3
         standardize_rewards: True
-        accumulate_train_batches: 1
+        
         adaptive_gamma: False
         final_lr: 2.0e-4
         lr_schedule: True
         final_entropy_coeff: 0.002
         entropy_schedule: False
+        
+        # Memory management, if batch size overflow, batch splitting is done to handle it
+        max_minibatch_size: 2048
+        updates_per_batch: 8 
 
         normalize_actions: False
         clip_rewards: null
@@ -80,7 +83,7 @@ procgen-ppo:
                 init_glorot: False
                 use_layernorm: True
 
-        num_workers: 4
+        num_workers: 7
         num_envs_per_worker: 16
 
         rollout_fragment_length: 256
