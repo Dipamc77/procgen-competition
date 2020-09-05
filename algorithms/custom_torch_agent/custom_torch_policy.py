@@ -53,6 +53,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.time_elapsed = 0
         self.batch_end_time = time.time()
         self.timesteps_total = 0
+        self.best_rew_tsteps = 0
         nw = self.config['num_workers'] if self.config['num_workers'] > 0 else 1
         self.nbatch = nw * self.config['num_envs_per_worker'] * self.config['rollout_fragment_length']
         if self.nbatch % self.config['sgd_minibatch_size'] != 0:
@@ -248,7 +249,6 @@ class CustomTorchPolicy(TorchPolicy):
         self.retune_selector.retune_done()
  
     def tune_policy(self, apply_grad, obs, target_vf, target_pi, retune_vf_loss_coeff):
-#         obs_aug = self.to_tensor(pad_and_random_crop(obs, 64, 10))
         obs_aug = np.empty(obs.shape, obs.dtype)
         aug_idx = np.random.randint(3, size=len(obs))
         obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
@@ -260,9 +260,7 @@ class CustomTorchPolicy(TorchPolicy):
             tpi_softmax = torch.exp(tpi_log_softmax)
         vpred, pi_logits = self.model.vf_pi(obs_aug, ret_numpy=False, no_grad=False, to_torch=False)
         pi_log_softmax =  nn.functional.log_softmax(pi_logits, dim=1)
-#         pi_loss = nn.functional.kl_div(pi_softmax, tpi_log_softmax, reduction='batchmean', log_target=True)
-        # kl_div in torch 1.3.1 has numerical issues
-        pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) 
+        pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) # kl_div torch 1.3.1 has numerical issues
         vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
         
         loss = retune_vf_loss_coeff * vf_loss + pi_loss
@@ -283,7 +281,7 @@ class CustomTorchPolicy(TorchPolicy):
         if self.best_reward < mean_reward:
             self.best_reward = mean_reward
             self.best_weights = self.get_weights()["current_weights"]
-            
+            self.best_rew_tsteps = self.timesteps_total
            
         if self.timesteps_total > self.target_timesteps or (self.time_elapsed + self.buffer_time) > self.max_time:
             if self.best_weights is not None:
@@ -294,10 +292,13 @@ class CustomTorchPolicy(TorchPolicy):
     
     def update_lr(self):
         if self.config['lr_schedule']:
-            self.lr = linear_schedule(initial_val=self.config['lr'], 
-                                      final_val=self.config['final_lr'], 
-                                      current_steps=self.timesteps_total, 
-                                      total_steps=self.target_timesteps)
+            if self.timesteps_total - self.best_rew_tsteps > 1e6:
+                self.best_rew_tsteps = self.timesteps_total
+                self.lr = self.lr * 0.6
+#             self.lr = linear_schedule(initial_val=self.config['lr'], 
+#                                       final_val=self.config['final_lr'], 
+#                                       current_steps=self.timesteps_total, 
+#                                       total_steps=self.target_timesteps)
     
     def update_ent_coef(self):
         if self.config['entropy_schedule']:
@@ -328,6 +329,7 @@ class CustomTorchPolicy(TorchPolicy):
             "lr": self.lr,
             "ent_coef": self.ent_coef,
             "rewnorm": self.rewnorm,
+            "best_rew_tsteps": self.best_rew_tsteps,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -342,6 +344,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.lr =custom_state_vars["lr"]
         self.ent_coef = custom_state_vars["ent_coef"]
         self.rewnorm = custom_state_vars["rewnorm"]
+        self.best_rew_tsteps = custom_state_vars["best_rew_tsteps"]
     
     @override(TorchPolicy)
     def get_weights(self):

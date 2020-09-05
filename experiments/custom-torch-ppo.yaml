@@ -78,7 +78,7 @@ procgen-ppo:
                 depths: [32, 64, 64]
                 nlatents: 512
                 init_glorot: False
-                use_layernorm_and_tanh: 'only_tanh'
+                use_layernorm: True
 
         num_workers: 4
         num_envs_per_worker: 16

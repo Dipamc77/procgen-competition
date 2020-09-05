@@ -72,7 +72,7 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         depths = model_config['custom_options'].get('depths') or [16, 32, 32]
         nlatents = model_config['custom_options'].get('nlatents') or 256
         init_glorot = model_config['custom_options'].get('init_glorot') or False
-        self.use_layernorm_and_tanh = model_config['custom_options'].get('use_layernorm_and_tanh') or 'both'
+        self.use_layernorm = model_config['custom_options'].get('use_layernorm') or True
         
         h, w, c = obs_space.shape
         shape = (c, h, w)
@@ -93,7 +93,7 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         self.value_fc = nn.Linear(in_features=nlatents, out_features=1)
         nn.init.orthogonal_(self.value_fc.weight, gain=1)
         nn.init.zeros_(self.value_fc.bias)
-        if self.use_layernorm_and_tanh == 'both':
+        if self.use_layernorm:
             self.layernorm = nn.LayerNorm(nlatents)
 
     
@@ -108,10 +108,8 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         x = torch.flatten(x, start_dim=1)
         x = nn.functional.relu(x)
         x = self.hidden_fc(x)
-        if self.use_layernorm_and_tanh == 'both':
+        if self.use_layernorm:
             x = self.layernorm(x)
-            x = torch.tanh(x)
-        elif self.use_layernorm_and_tanh == 'only_tanh':
             x = torch.tanh(x)
         else:
             x = nn.functional.relu(x)
