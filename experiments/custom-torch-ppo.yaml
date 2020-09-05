@@ -16,7 +16,7 @@ procgen-ppo:
     config:
         # === Settings for the Procgen Environment ===
         env_config:
-            env_name: bigfish
+            env_name: coinrun
             num_levels: 0
             start_level: 0
             paint_vel_info: False
@@ -27,7 +27,7 @@ procgen-ppo:
             frame_stack: 2
             return_min: 0
             return_blind: 1
-            return_max: 40
+            return_max: 10
 
         gamma: 0.996
         lambda: 0.95
