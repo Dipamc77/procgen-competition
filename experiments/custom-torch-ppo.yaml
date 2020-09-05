@@ -24,7 +24,7 @@ procgen-ppo:
             center_agent: True
             use_sequential_levels: False
             distribution_mode: easy
-            frame_stack: 1
+            frame_stack: 2
             return_min: 0
             return_blind: 1
             return_max: 10
@@ -83,8 +83,8 @@ procgen-ppo:
                 init_glorot: False
                 use_layernorm: True
 
-        num_workers: 4
-        num_envs_per_worker: 16
+        num_workers: 7
+        num_envs_per_worker: 26
 
         rollout_fragment_length: 256
 
