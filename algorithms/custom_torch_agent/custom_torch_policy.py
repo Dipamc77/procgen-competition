@@ -54,9 +54,13 @@ class CustomTorchPolicy(TorchPolicy):
         self.batch_end_time = time.time()
         self.timesteps_total = 0
         self.best_rew_tsteps = 0
+        
         nw = self.config['num_workers'] if self.config['num_workers'] > 0 else 1
         self.nbatch = nw * self.config['num_envs_per_worker'] * self.config['rollout_fragment_length']
-        if self.nbatch % self.config['sgd_minibatch_size'] != 0:
+        self.actual_batch_size = self.nbatch // self.config['updates_per_batch']
+        self.accumulate_train_batches = int(np.ceil( self.actual_batch_size / self.config['max_minibatch_size'] ))
+        self.mem_limited_batch_size = self.actual_batch_size // self.accumulate_train_batches
+        if self.nbatch % self.actual_batch_size != 0:
             print("########################################################################################")
             print("WARNING: SGD Minibatch Size should exactly divide NUM_ENV * NUM_WORKERS * ROLLOUT_LENGTH")
             print("########################################################################################")
@@ -64,6 +68,7 @@ class CustomTorchPolicy(TorchPolicy):
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
+        
         
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
@@ -106,7 +111,7 @@ class CustomTorchPolicy(TorchPolicy):
             return {}
          
         ## Config data values
-        nbatch_train = self.config['sgd_minibatch_size']
+        nbatch_train = self.mem_limited_batch_size 
         gamma, lam = self.gamma, self.config['lambda']
         nsteps = self.config['rollout_fragment_length']
         nenvs = nbatch//nsteps
@@ -154,21 +159,24 @@ class CustomTorchPolicy(TorchPolicy):
         neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
         actions = samples['actions']
         returns = roll(mb_returns)
-        nminibatches = nbatch // nbatch_train
         noptepochs = self.config['num_sgd_iter']
 
         ## Train multiple epochs
         optim_count = 0
-        accumulate_train_batches = self.config['accumulate_train_batches']
         inds = np.arange(nbatch)
         for _ in range(noptepochs):
             np.random.shuffle(inds)
+            normalized_advs = returns - values
+            for start in range(0, nbatch, self.actual_batch_size):
+                end = start + self.actual_batch_size
+                advs_slice = normalized_advs[start:end]
+                normalized_advs[start:end] = np.mean(advs_slice) / (np.std(advs_slice) + 1e-8)
             for start in range(0, nbatch, nbatch_train):
                 end = start + nbatch_train
                 mbinds = inds[start:end]
-                slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs))
+                slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs, normalized_advs))
                 optim_count += 1
-                apply_grad = (optim_count % accumulate_train_batches) == 0
+                apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 self._batch_train(apply_grad, lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
                
         self.update_gamma(samples)
@@ -185,12 +193,12 @@ class CustomTorchPolicy(TorchPolicy):
     def _batch_train(self, apply_grad, lr, 
                      cliprange, vfcliprange, max_grad_norm,
                      ent_coef, vf_coef,
-                     obs, returns, actions, values, neglogpac_old):
+                     obs, returns, actions, values, neglogpac_old, advs):
         
         for g in self.optimizer.param_groups:
             g['lr'] = lr
-        advs = returns - values
-        advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
+#         advs = returns - values
+#         advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
         vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
         neglogpac = neglogp_actions(pi_logits, actions)
         entropy = torch.mean(pi_entropy(pi_logits))
@@ -207,7 +215,7 @@ class CustomTorchPolicy(TorchPolicy):
 
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
         
-        loss = loss / self.config['accumulate_train_batches']
+        loss = loss / self.accumulate_train_batches
 
         loss.backward()
         if apply_grad:
@@ -217,7 +225,7 @@ class CustomTorchPolicy(TorchPolicy):
 
         
     def retune_with_augmentation(self, obs):
-        nbatch_train = self.config['sgd_minibatch_size']
+        nbatch_train = self.mem_limited_batch_size 
         retune_epochs = self.config['retune_epochs']
         replay_size = self.retune_selector.replay_size
         replay_vf = np.empty((replay_size,), dtype=np.float32)
@@ -231,7 +239,6 @@ class CustomTorchPolicy(TorchPolicy):
                                                                           ret_numpy=True, no_grad=True, to_torch=True)
         
         optim_count = 0
-        accumulate_train_batches = self.config['accumulate_train_batches']
         # Tune vf and pi heads to older predictions with augmented observations
         inds = np.arange(len(self.retune_selector.exp_replay))
         for ep in range(retune_epochs):
@@ -240,7 +247,7 @@ class CustomTorchPolicy(TorchPolicy):
                 end = start + nbatch_train
                 mbinds = inds[start:end]
                 optim_count += 1
-                apply_grad = (optim_count % accumulate_train_batches) == 0
+                apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 slices = [self.retune_selector.exp_replay[mbinds], 
                           self.to_tensor(replay_vf[mbinds]), 
                           self.to_tensor(replay_pi[mbinds])]
@@ -264,7 +271,7 @@ class CustomTorchPolicy(TorchPolicy):
         vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
         
         loss = retune_vf_loss_coeff * vf_loss + pi_loss
-        loss = loss / self.config['accumulate_train_batches']
+        loss = loss / self.accumulate_train_batches
         
         loss.backward()
         if apply_grad:
@@ -292,13 +299,13 @@ class CustomTorchPolicy(TorchPolicy):
     
     def update_lr(self):
         if self.config['lr_schedule']:
-            if self.timesteps_total - self.best_rew_tsteps > 1e6:
-                self.best_rew_tsteps = self.timesteps_total
-                self.lr = self.lr * 0.6
-#             self.lr = linear_schedule(initial_val=self.config['lr'], 
-#                                       final_val=self.config['final_lr'], 
-#                                       current_steps=self.timesteps_total, 
-#                                       total_steps=self.target_timesteps)
+#             if self.timesteps_total - self.best_rew_tsteps > 1e6:
+#                 self.best_rew_tsteps = self.timesteps_total
+#                 self.lr = self.lr * 0.6
+            self.lr = linear_schedule(initial_val=self.config['lr'], 
+                                      final_val=self.config['final_lr'], 
+                                      current_steps=self.timesteps_total, 
+                                      total_steps=self.target_timesteps)
     
     def update_ent_coef(self):
         if self.config['entropy_schedule']:
