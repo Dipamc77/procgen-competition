@@ -60,10 +60,10 @@ class CustomTorchPolicy(TorchPolicy):
         self.actual_batch_size = self.nbatch // self.config['updates_per_batch']
         self.accumulate_train_batches = int(np.ceil( self.actual_batch_size / self.config['max_minibatch_size'] ))
         self.mem_limited_batch_size = self.actual_batch_size // self.accumulate_train_batches
-        if self.nbatch % self.actual_batch_size != 0:
-            print("########################################################################################")
-            print("WARNING: SGD Minibatch Size should exactly divide NUM_ENV * NUM_WORKERS * ROLLOUT_LENGTH")
-            print("########################################################################################")
+        if self.nbatch % self.actual_batch_size != 0 or self.nbatch % self.mem_limited_batch_size != 0:
+            print("#################################################")
+            print("WARNING: MEMORY LIMITED BATCHING NOT SET PROPERLY")
+            print("#################################################")
         self.retune_selector = RetuneSelector(self.nbatch, observation_space, action_space, 
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
@@ -157,10 +157,10 @@ class CustomTorchPolicy(TorchPolicy):
         ent_coef, vf_coef = self.ent_coef, self.config['vf_loss_coeff']
         
         neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
+        noptepochs = self.config['num_sgd_iter']
         actions = samples['actions']
         returns = roll(mb_returns)
-        noptepochs = self.config['num_sgd_iter']
-
+        
         ## Train multiple epochs
         optim_count = 0
         inds = np.arange(nbatch)
@@ -179,7 +179,37 @@ class CustomTorchPolicy(TorchPolicy):
                 slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs, normalized_advs))
                 optim_count += 1
                 apply_grad = (optim_count % self.accumulate_train_batches) == 0
-                self._batch_train(apply_grad, lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
+                self._batch_train(apply_grad, self.accumulate_train_batches,
+                                  lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
+
+
+#         actions = samples['actions']
+#         old_memdata = nbatch, self.actual_batch_size_new, nbatch_train, self.accumulate_train_batches
+#         old_data = obs, mb_returns, actions, mb_values, neglogpacs
+#         old_memdata, new_data = self.smart_frameskip(ts, old_memdata, old_data)
+#         nbatch_new, actual_batch_size_new, nbatch_train_new, num_acc_new = old_memdata
+#         obs_new, returns_new, actions_new, values_new, neglogpacs_new = new_data
+#         ## Train multiple epochs
+#         optim_count = 0
+#         inds = np.arange(nbatch_new)
+#         for _ in range(noptepochs):
+#             np.random.shuffle(inds)
+#             normalized_advs = returns_new - values_new
+#             # Can do this because actual_batch_size is a multiple of mem_limited_batch_size
+#             for start in range(0, nbatch_new, actual_batch_size_new):
+#                 end = start + actual_batch_size_new
+#                 mbinds = inds[start:end]
+#                 advs_batch = normalized_advs[mbinds].copy()
+#                 normalized_advs[mbinds] = (advs_batch - np.mean(advs_batch)) / (np.std(advs_batch) + 1e-8) 
+#             for start in range(0, nbatch_new, nbatch_train_new):
+#                 end = start + nbatch_train_new
+#                 mbinds = inds[start:end]
+#                 slices = (self.to_tensor(arr[mbinds]) for arr in (obs_new, returns_new, actions_new, values_new, 
+#                                                                   neglogpacs_new, normalized_advs))
+#                 optim_count += 1
+#                 apply_grad = (optim_count % num_acc_new) == 0
+#                 self._batch_train(apply_grad, num_acc_new, lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)    
+    
                
         self.update_gamma(samples)
         self.update_lr()
@@ -187,13 +217,16 @@ class CustomTorchPolicy(TorchPolicy):
             
         self.update_batch_time()
         return {}
+    
+#     def smart_frameskip(ts, old_memvals, old_data):
+        
 
     def update_batch_time(self):
         self.time_elapsed += time.time() - self.batch_end_time
         self.batch_end_time = time.time()
         
-    def _batch_train(self, apply_grad, lr, 
-                     cliprange, vfcliprange, max_grad_norm,
+    def _batch_train(self, apply_grad, num_accumulate, 
+                     lr, cliprange, vfcliprange, max_grad_norm,
                      ent_coef, vf_coef,
                      obs, returns, actions, values, neglogpac_old, advs):
         
@@ -217,7 +250,7 @@ class CustomTorchPolicy(TorchPolicy):
 
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
         
-        loss = loss / self.accumulate_train_batches
+        loss = loss / num_accumulate
 
         loss.backward()
         if apply_grad:

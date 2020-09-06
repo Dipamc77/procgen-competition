@@ -84,7 +84,7 @@ procgen-ppo:
                 use_layernorm: True
 
         num_workers: 7
-        num_envs_per_worker: 16
+        num_envs_per_worker: 24
 
         rollout_fragment_length: 256
 
