@@ -301,7 +301,7 @@ class CustomTorchPolicy(TorchPolicy):
     
     def update_lr(self):
         if self.config['lr_schedule']:
-            self.lr = 0.995 * self.lr
+            self.lr = 0.997 * self.lr
 #             if self.timesteps_total - self.best_rew_tsteps > 1e6:
 #                 self.best_rew_tsteps = self.timesteps_total
 #                 self.lr = self.lr * 0.6
