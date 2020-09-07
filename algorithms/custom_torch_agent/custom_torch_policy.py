@@ -80,6 +80,8 @@ class CustomTorchPolicy(TorchPolicy):
         self.lr = config['lr']
         self.ent_coef = config['entropy_coeff']
         
+        self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
+        
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
         
@@ -96,7 +98,26 @@ class CustomTorchPolicy(TorchPolicy):
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
         
+        ## Config data values
         nbatch = self.nbatch
+        nbatch_train = self.mem_limited_batch_size 
+        gamma, lam = self.gamma, self.config['lambda']
+        nsteps = self.config['rollout_fragment_length']
+        nenvs = nbatch//nsteps
+        ts = (nenvs, nsteps)
+        mb_dones = unroll(samples['dones'], ts)
+        
+        ## Reward Normalization - No reward norm works well for many envs
+        if self.config['standardize_rewards']:
+            mb_origrewards = unroll(samples['rewards'], ts)
+            mb_rewards =  np.zeros_like(mb_origrewards)
+            mb_rewards[0] = self.rewnorm.normalize(mb_origrewards[0], self.last_dones)
+            for ii in range(1, nsteps):
+                mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii], mb_dones[ii-1])
+            self.last_dones = mb_dones[-1]
+        else:
+            mb_rewards = unroll(samples['rewards'], ts)
+        
         should_skip_train_step = self.best_reward_model_select(samples)
         if should_skip_train_step:
             self.update_batch_time()
@@ -110,13 +131,8 @@ class CustomTorchPolicy(TorchPolicy):
             self.update_batch_time()
             return {}
          
-        ## Config data values
-        nbatch_train = self.mem_limited_batch_size 
-        gamma, lam = self.gamma, self.config['lambda']
-        nsteps = self.config['rollout_fragment_length']
-        nenvs = nbatch//nsteps
-        ts = (nenvs, nsteps)
         
+
         ## Value prediction
         next_obs = unroll(samples['new_obs'], ts)[-1]
         last_values, _ = self.model.vf_pi(next_obs, ret_numpy=True, no_grad=True, to_torch=True)
@@ -125,18 +141,10 @@ class CustomTorchPolicy(TorchPolicy):
             end = start + nbatch_train
             values[start:end], _ = self.model.vf_pi(samples['obs'][start:end], ret_numpy=True, no_grad=True, to_torch=True)
         
-        ## Reward Normalization - No reward norm works well for many envs
-        mb_values = unroll(values, ts)
-        if self.config['standardize_rewards']:
-            mb_origrewards = unroll(samples['rewards'], ts)
-            mb_rewards =  np.zeros_like(mb_origrewards)
-            for ii in range(nsteps):
-                mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii])
-        else:
-            mb_rewards = unroll(samples['rewards'], ts)
-        mb_dones = unroll(samples['dones'], ts)
+        
         
         ## GAE
+        mb_values = unroll(values, ts)
         mb_returns = np.zeros_like(mb_rewards)
         mb_advs = np.zeros_like(mb_rewards)
         lastgaelam = 0
@@ -374,6 +382,7 @@ class CustomTorchPolicy(TorchPolicy):
             "rewnorm": self.rewnorm,
             "best_rew_tsteps": self.best_rew_tsteps,
             "best_reward": self.best_reward,
+            "last_dones": self.last_dones,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -390,6 +399,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.rewnorm = custom_state_vars["rewnorm"]
         self.best_rew_tsteps = custom_state_vars["best_rew_tsteps"]
         self.best_reward = custom_state_vars["best_reward"]
+        self.last_dones = custom_state_vars["last_dones"]
     
     @override(TorchPolicy)
     def get_weights(self):
