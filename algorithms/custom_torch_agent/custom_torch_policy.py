@@ -334,12 +334,13 @@ class CustomTorchPolicy(TorchPolicy):
     
     def update_lr(self):
         if self.config['lr_schedule']:
-#             if self.timesteps_total - self.best_rew_tsteps > 1e6:
-#                 self.best_rew_tsteps = self.timesteps_total
-#                 self.lr = self.lr * 0.6
-            self.lr = linear_schedule(initial_val=self.config['lr'], 
-                                      final_val=self.config['final_lr'], 
-                                      current_steps=self.timesteps_total, 
+            # self.lr = 0.997 * self.lr
+            # if self.timesteps_total - self.best_rew_tsteps > 1e6:
+            #     self.best_rew_tsteps = self.timesteps_total
+            #     self.lr = self.lr * 0.6
+            self.lr = linear_schedule(initial_val=self.config['lr'],
+                                      final_val=self.config['final_lr'],
+                                      current_steps=self.timesteps_total,
                                       total_steps=self.target_timesteps)
     
     def update_ent_coef(self):
