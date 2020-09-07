@@ -130,4 +130,9 @@ class CustomCallbacks(DefaultCallbacks):
         # print("=============================================================")
         # print(" Timesteps Throughput : {} ts/sec".format(TBD))
         # print("=============================================================")
-        pass
+        trainer_policy = trainer.get_policy()
+        result['current_lr'] = trainer_policy.lr
+        result['current_gamma'] = trainer_policy.gamma
+        result['best_reward'] = trainer_policy.best_reward
+        result['best_rew_tsteps'] = trainer_policy.best_rew_tsteps
+        

@@ -372,6 +372,7 @@ class CustomTorchPolicy(TorchPolicy):
             "ent_coef": self.ent_coef,
             "rewnorm": self.rewnorm,
             "best_rew_tsteps": self.best_rew_tsteps,
+            "best_reward": self.best_reward,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -387,6 +388,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.ent_coef = custom_state_vars["ent_coef"]
         self.rewnorm = custom_state_vars["rewnorm"]
         self.best_rew_tsteps = custom_state_vars["best_rew_tsteps"]
+        self.best_reward = custom_state_vars["best_reward"]
     
     @override(TorchPolicy)
     def get_weights(self):
