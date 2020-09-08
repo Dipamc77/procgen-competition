@@ -53,8 +53,8 @@ procgen-ppo:
         standardize_rewards: True
         
         adaptive_gamma: False
-        final_lr: 2.0e-4
-        lr_schedule: 'exponential'
+        final_lr: 3.0e-4
+        lr_schedule: 'linear'
         final_entropy_coeff: 0.002
         entropy_schedule: False
         

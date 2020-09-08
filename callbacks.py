@@ -135,4 +135,8 @@ class CustomCallbacks(DefaultCallbacks):
         result['current_gamma'] = trainer_policy.gamma
         result['best_reward'] = trainer_policy.best_reward
         result['best_rew_tsteps'] = trainer_policy.best_rew_tsteps
+        result['rnorm_var'] = trainer_policy.rewnorm.ret_rms.var
+        result['rnorm_mean'] = trainer_policy.rewnorm.ret_rms.mean
+
+       
         
