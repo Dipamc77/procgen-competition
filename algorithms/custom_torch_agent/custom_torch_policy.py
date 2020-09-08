@@ -208,13 +208,14 @@ class CustomTorchPolicy(TorchPolicy):
         
         for g in self.optimizer.param_groups:
             g['lr'] = lr
-#         advs = returns - values
+        # Advantages are normalized with full size batch instead of memory limited batch
+#         advs = returns - values 
 #         advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
         vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
         neglogpac = neglogp_actions(pi_logits, actions)
         entropy = torch.mean(pi_entropy(pi_logits))
 
-        vpredclipped = values + torch.clamp(vpred - values, -cliprange, cliprange)
+        vpredclipped = values + torch.clamp(vpred - values, -vfcliprange, vfcliprange)
         vf_losses1 = torch.pow((vpred - returns), 2)
         vf_losses2 = torch.pow((vpredclipped - returns), 2)
         vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2))
