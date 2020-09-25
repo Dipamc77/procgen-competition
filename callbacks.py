@@ -137,6 +137,11 @@ class CustomCallbacks(DefaultCallbacks):
         result['best_rew_tsteps'] = trainer_policy.best_rew_tsteps
         result['rnorm_var'] = trainer_policy.rewnorm.ret_rms.var
         result['rnorm_mean'] = trainer_policy.rewnorm.ret_rms.mean
+        result['num_levels'] = trainer_policy.config['env_config']['num_levels']
+        result['return_min'] = trainer_policy.config['env_config']['return_min']
+        result['return_blind'] = trainer_policy.config['env_config']['return_blind']
+        result['return_max'] = trainer_policy.config['env_config']['return_max']
+
 
        
         
