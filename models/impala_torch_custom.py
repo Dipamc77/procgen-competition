@@ -13,9 +13,12 @@ class ResidualBlock(nn.Module):
         self.conv0 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
         self.conv1 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
         if init_normed:
-            self.conv0.weight.data *= 1 / self.conv0.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
+            scale = (1/3**0.5 * 1/2**0.5)**0.5 
+            # Understand logic for this scale -> 
+            # https://github.com/openai/phasic-policy-gradient/blob/master/phasic_policy_gradient/impala_cnn.py
+            self.conv0.weight.data *= scale / self.conv0.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
             nn.init.zeros_(self.conv0.bias)
-            self.conv1.weight.data *= 1 / self.conv1.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
+            self.conv1.weight.data *= scale / self.conv1.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
             nn.init.zeros_(self.conv1.bias)
 
     
@@ -37,7 +40,7 @@ class ConvSequence(nn.Module):
         self.res_block0 = ResidualBlock(self._out_channels, init_normed)
         self.res_block1 = ResidualBlock(self._out_channels, init_normed)
         if init_normed:
-            self.conv.weight.data *= 1 / self.conv.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
+            self.conv.weight.data *= 1. / self.conv.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
             nn.init.zeros_(self.conv.bias)
 
     def forward(self, x, pool=True):
