@@ -145,7 +145,7 @@ class RewardNormalizer(object):
         self.ret = self.ret * self.gamma + rews
         self.ret_rms.update(self.ret)
         rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-        self.ret[np.array(news, dtype=bool)] = 0. ## Values should be True of False to set positional index
+#         self.ret[np.array(news, dtype=bool)] = 0. ## Values should be True of False to set positional index
         return rews
     
 class RunningMeanStd(object):

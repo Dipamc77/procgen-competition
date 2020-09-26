@@ -80,7 +80,7 @@ procgen-ppo:
 #                 nlatents: 1024
                 depths: [32, 64, 64]
                 nlatents: 512
-                init_normed: True
+                init_normed: False
                 use_layernorm: True
 
         num_workers: 7
