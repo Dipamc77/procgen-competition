@@ -1,6 +1,6 @@
 procgen-ppo:
     env: frame_stacked_procgen
-    run: CustomTorchPPOAgent
+    run: CustomTorchPPGAgent
     disable_evaluation_worker: True
     # === Stop Conditions ===
     stop:
@@ -29,12 +29,12 @@ procgen-ppo:
             return_blind: 1
             return_max: 10
 
-        gamma: 0.996
+        gamma: 0.999
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
-        num_sgd_iter: 3
-        vf_loss_coeff: 0.5
+        num_sgd_iter: 1
+        vf_loss_coeff: 1.0
         entropy_coeff: 0.01
         clip_param: 0.2
         vf_clip_param: 0.2
@@ -48,19 +48,21 @@ procgen-ppo:
         # Custom switches
         retune_skips: 300000
         retune_replay_size: 200000
-        num_retunes: 8
-        retune_epochs: 3
+        num_retunes: 20
+        retune_epochs: 6
         standardize_rewards: True
+        aux_mbsize: 512
         
         adaptive_gamma: False
         final_lr: 2.0e-4
-        lr_schedule: 'linear'
+        lr_schedule: 'None'
         final_entropy_coeff: 0.002
         entropy_schedule: False
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
         max_minibatch_size: 2048
         updates_per_batch: 8 
+        
 
         normalize_actions: False
         clip_rewards: null
@@ -74,16 +76,16 @@ procgen-ppo:
 
         # === Settings for Model ===
         model:
-            custom_model: impala_torch_custom
+            custom_model: impala_torch_ppg
             custom_options: 
 #                 depths: [64, 128, 128]
 #                 nlatents: 1024
                 depths: [32, 64, 64]
                 nlatents: 512
-                init_normed: False
-                use_layernorm: True
+                init_normed: True
+                use_layernorm: False
 
-        num_workers: 7
+        num_workers: 4
         num_envs_per_worker: 16
 
         rollout_fragment_length: 256

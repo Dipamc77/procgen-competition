@@ -92,14 +92,19 @@ class ImpalaCNN(TorchModelV2, nn.Module):
             nn.init.zeros_(self.hidden_fc.bias)
         self.pi_fc = nn.Linear(in_features=nlatents, out_features=num_outputs)
         self.value_fc = nn.Linear(in_features=nlatents, out_features=1)
+        self.aux_vf = nn.Linear(in_features=nlatents, out_features=1)
         if init_normed:
             self.pi_fc.weight.data *= 0.1 / self.pi_fc.weight.norm(dim=1, p=2, keepdim=True)
             self.value_fc.weight.data *= 0.1 / self.value_fc.weight.norm(dim=1, p=2, keepdim=True)
+            self.aux_vf.weight.data *= 0.1 / self.aux_vf.weight.norm(dim=1, p=2, keepdim=True)
         else:
             nn.init.orthogonal_(self.pi_fc.weight, gain=0.01)
             nn.init.orthogonal_(self.value_fc.weight, gain=1)
+            nn.init.orthogonal_(self.aux_vf.weight, gain=1)
+
         nn.init.zeros_(self.pi_fc.bias)
         nn.init.zeros_(self.value_fc.bias)
+        nn.init.zeros_(self.aux_vf.bias)
         if self.use_layernorm:
             self.layernorm = nn.LayerNorm(nlatents)
 
@@ -121,14 +126,19 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         else:
             x = nn.functional.relu(x)
         logits = self.pi_fc(x)
-        value = self.value_fc(x)
+        value = self.value_fc(x.detach())
         self._value = value.squeeze(1)
+        self._aux_value = self.aux_vf(x).squeeze(1)
         return logits, state
 
     @override(TorchModelV2)
     def value_function(self):
         assert self._value is not None, "must call forward() first"
         return self._value
+    
+    def aux_value_function(self):
+        return self._aux_value
+    
     
     def vf_pi(self, obs, no_grad=False, ret_numpy=False, to_torch=False):
         if to_torch:
@@ -150,4 +160,4 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         else:
             return v, pi
     
-ModelCatalog.register_custom_model("impala_torch_custom", ImpalaCNN)
+ModelCatalog.register_custom_model("impala_torch_ppg", ImpalaCNN)

@@ -44,7 +44,8 @@ class CustomTorchPolicy(TorchPolicy):
         )
 
         self.framework = "torch"
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
+        self.aux_optimizer = torch.optim.Adam(self.model.parameters(), lr=5e-4)
         self.max_reward = self.config['env_config']['return_max']
         self.rewnorm = RewardNormalizer(cliprew=self.max_reward) ## TODO: Might need to go to custom state
         self.reward_deque = deque(maxlen=100)
@@ -124,14 +125,6 @@ class CustomTorchPolicy(TorchPolicy):
             return {} # Not doing last optimization step - This is intentional due to noisy gradients
           
         obs = samples['obs']
-        ## Distill with augmentation
-        should_retune = self.retune_selector.update(obs)
-        if should_retune:
-            self.retune_with_augmentation(obs)
-            self.update_batch_time()
-            return {}
-         
-        
 
         ## Value prediction
         next_obs = unroll(samples['new_obs'], ts)[-1]
@@ -190,6 +183,13 @@ class CustomTorchPolicy(TorchPolicy):
                 self._batch_train(apply_grad, self.accumulate_train_batches,
                                   lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
 
+        ## Distill with aux head
+        should_retune = self.retune_selector.update(obs, returns)
+        if should_retune:
+            self.aux_train()
+            self.update_batch_time()
+            return {}
+        
         self.update_gamma(samples)
         self.update_lr()
         self.update_ent_coef()
@@ -215,10 +215,7 @@ class CustomTorchPolicy(TorchPolicy):
         neglogpac = neglogp_actions(pi_logits, actions)
         entropy = torch.mean(pi_entropy(pi_logits))
 
-        vpredclipped = values + torch.clamp(vpred - values, -vfcliprange, vfcliprange)
-        vf_losses1 = torch.pow((vpred - returns), 2)
-        vf_losses2 = torch.pow((vpredclipped - returns), 2)
-        vf_loss = .5 * torch.mean(torch.max(vf_losses1, vf_losses2))
+        vf_loss = .5 * torch.mean(torch.pow((vpred - returns), 2))
 
         ratio = torch.exp(neglogpac_old - neglogpac)
         pg_losses1 = -advs * ratio
@@ -231,64 +228,65 @@ class CustomTorchPolicy(TorchPolicy):
 
         loss.backward()
         if apply_grad:
-            nn.utils.clip_grad_norm_(self.model.parameters(), max_grad_norm)
             self.optimizer.step()
             self.optimizer.zero_grad()
 
         
-    def retune_with_augmentation(self, obs):
+    def aux_train(self):
+        for g in self.aux_optimizer.param_groups:
+            g['lr'] = self.lr
         nbatch_train = self.mem_limited_batch_size 
+        aux_nbatch_train = self.config['aux_mbsize'] 
         retune_epochs = self.config['retune_epochs']
         replay_size = self.retune_selector.replay_size
-        replay_vf = np.empty((replay_size,), dtype=np.float32)
         replay_pi = np.empty((replay_size, self.retune_selector.ac_space.n), dtype=np.float32)
 
         # Store current value function and policy logits
         for start in range(0, replay_size, nbatch_train):
             end = start + nbatch_train
             replay_batch = self.retune_selector.exp_replay[start:end]
-            replay_vf[start:end], replay_pi[start:end] = self.model.vf_pi(replay_batch, 
-                                                                          ret_numpy=True, no_grad=True, to_torch=True)
+            _, replay_pi[start:end] = self.model.vf_pi(replay_batch, 
+                                                       ret_numpy=True, no_grad=True, to_torch=True)
         
         optim_count = 0
         # Tune vf and pi heads to older predictions with augmented observations
         inds = np.arange(len(self.retune_selector.exp_replay))
         for ep in range(retune_epochs):
             np.random.shuffle(inds)
-            for start in range(0, replay_size, nbatch_train):
-                end = start + nbatch_train
+            for start in range(0, replay_size, aux_nbatch_train):
+                end = start + aux_nbatch_train
                 mbinds = inds[start:end]
                 optim_count += 1
-                apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 slices = [self.retune_selector.exp_replay[mbinds], 
-                          self.to_tensor(replay_vf[mbinds]), 
+                          self.to_tensor(self.retune_selector.vtarg_replay[mbinds]), 
                           self.to_tensor(replay_pi[mbinds])]
-                self.tune_policy(apply_grad, *slices, 0.5)
+                self.tune_policy(*slices)
 
         self.retune_selector.retune_done()
  
-    def tune_policy(self, apply_grad, obs, target_vf, target_pi, retune_vf_loss_coeff):
-        obs_aug = np.empty(obs.shape, obs.dtype)
-        aug_idx = np.random.randint(3, size=len(obs))
-        obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
-        obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
-        obs_aug[aug_idx == 2] = obs[aug_idx == 2]
-        obs_aug = self.to_tensor(obs_aug)
+    def tune_policy(self, obs, target_vf, target_pi):
+#         obs_aug = np.empty(obs.shape, obs.dtype)
+#         aug_idx = np.random.randint(3, size=len(obs))
+#         obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
+#         obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
+#         obs_aug[aug_idx == 2] = obs[aug_idx == 2]
+#         obs_aug = self.to_tensor(obs_aug)
+        obs = self.to_tensor(obs)
         with torch.no_grad():
             tpi_log_softmax = nn.functional.log_softmax(target_pi, dim=1)
             tpi_softmax = torch.exp(tpi_log_softmax)
-        vpred, pi_logits = self.model.vf_pi(obs_aug, ret_numpy=False, no_grad=False, to_torch=False)
+        vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
+        aux_vpred = self.model.aux_value_function()
         pi_log_softmax =  nn.functional.log_softmax(pi_logits, dim=1)
         pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) # kl_div torch 1.3.1 has numerical issues
         vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
+        aux_loss = .5 * torch.mean(torch.pow(aux_vpred - target_vf, 2))
         
-        loss = retune_vf_loss_coeff * vf_loss + pi_loss
-        loss = loss / self.accumulate_train_batches
+        loss = vf_loss + pi_loss + aux_loss
         
         loss.backward()
-        if apply_grad:
-            self.optimizer.step()
-            self.optimizer.zero_grad()
+        self.aux_optimizer.step()
+        self.aux_optimizer.zero_grad()
         
     def best_reward_model_select(self, samples):
         self.timesteps_total += self.nbatch
@@ -344,6 +342,7 @@ class CustomTorchPolicy(TorchPolicy):
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
             "num_retunes": self.retune_selector.num_retunes,
+#             "retune_selector": self.retune_selector,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
@@ -361,6 +360,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
         self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
+#         self.retune_selector = custom_state_vars["num_retunes"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
@@ -381,6 +381,10 @@ class CustomTorchPolicy(TorchPolicy):
             k: v
             for k, v in self.optimizer.state_dict().items()
         }
+        weights["aux_optimizer_state"] = {
+            k: v
+            for k, v in self.aux_optimizer.state_dict().items()
+        }
         weights["custom_state_vars"] = self.get_custom_state_vars()
         return weights
         
@@ -389,7 +393,12 @@ class CustomTorchPolicy(TorchPolicy):
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
         self.set_optimizer_state(weights["optimizer_state"])
+        self.set_aux_optimizer_state(weights["aux_optimizer_state"])
         self.set_custom_state_vars(weights["custom_state_vars"])
+        
+    def set_aux_optimizer_state(self, aux_optimizer_state):
+        aux_optimizer_state = convert_to_torch_tensor(aux_optimizer_state, device=self.device)
+        self.aux_optimizer.load_state_dict(aux_optimizer_state)
         
     def set_optimizer_state(self, optimizer_state):
         optimizer_state = convert_to_torch_tensor(optimizer_state, device=self.device)

@@ -1,7 +1,7 @@
 import logging
 
 from ray.rllib.agents import with_common_config
-from .custom_torch_policy import CustomTorchPolicy
+from .custom_torch_ppg import CustomTorchPolicy
 from ray.rllib.agents.trainer_template import build_trainer
 
 logger = logging.getLogger(__name__)
@@ -84,12 +84,13 @@ DEFAULT_CONFIG = with_common_config({
     
     "max_minibatch_size": 2048,
     "updates_per_batch": 8, 
+    "aux_mbsize": 512,
 })
 # __sphinx_doc_end__
 # yapf: enable
 
 
-PPOTrainer = build_trainer(
-    name="CustomTorchPPOAgent",
+PPGTrainer = build_trainer(
+    name="CustomTorchPPGAgent",
     default_config=DEFAULT_CONFIG,
     default_policy=CustomTorchPolicy)
