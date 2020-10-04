@@ -141,6 +141,8 @@ class CustomCallbacks(DefaultCallbacks):
         result['return_min'] = trainer_policy.config['env_config']['return_min']
         result['return_blind'] = trainer_policy.config['env_config']['return_blind']
         result['return_max'] = trainer_policy.config['env_config']['return_max']
+        result['buffer_save_success'] = trainer_policy.save_success
+
 
 
        
