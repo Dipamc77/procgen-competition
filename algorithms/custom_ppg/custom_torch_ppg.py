@@ -70,7 +70,9 @@ class CustomTorchPolicy(TorchPolicy):
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
         
-        
+        self.exp_replay = np.zeros((self.retune_selector.replay_size, *observation_space.shape), dtype=np.uint8)
+        self.vtarg_replay = np.zeros((self.retune_selector.replay_size), dtype=np.float32)
+        self.save_success = 0
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
         self.max_time = 7200
@@ -98,7 +100,6 @@ class CustomTorchPolicy(TorchPolicy):
             >>> ev.learn_on_batch(samples)
         Reference: https://github.com/ray-project/ray/blob/master/rllib/policy/policy.py#L279-L316
         """
-        
         ## Config data values
         nbatch = self.nbatch
         nbatch_train = self.mem_limited_batch_size 
@@ -184,7 +185,7 @@ class CustomTorchPolicy(TorchPolicy):
                                   lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
 
         ## Distill with aux head
-        should_retune = self.retune_selector.update(obs, returns)
+        should_retune = self.retune_selector.update(obs, returns, self.exp_replay, self.vtarg_replay)
         if should_retune:
             self.aux_train()
             self.update_batch_time()
@@ -244,21 +245,21 @@ class CustomTorchPolicy(TorchPolicy):
         # Store current value function and policy logits
         for start in range(0, replay_size, nbatch_train):
             end = start + nbatch_train
-            replay_batch = self.retune_selector.exp_replay[start:end]
+            replay_batch = self.exp_replay[start:end]
             _, replay_pi[start:end] = self.model.vf_pi(replay_batch, 
                                                        ret_numpy=True, no_grad=True, to_torch=True)
         
         optim_count = 0
         # Tune vf and pi heads to older predictions with augmented observations
-        inds = np.arange(len(self.retune_selector.exp_replay))
+        inds = np.arange(len(self.exp_replay))
         for ep in range(retune_epochs):
             np.random.shuffle(inds)
             for start in range(0, replay_size, aux_nbatch_train):
                 end = start + aux_nbatch_train
                 mbinds = inds[start:end]
                 optim_count += 1
-                slices = [self.retune_selector.exp_replay[mbinds], 
-                          self.to_tensor(self.retune_selector.vtarg_replay[mbinds]), 
+                slices = [self.exp_replay[mbinds], 
+                          self.to_tensor(self.vtarg_replay[mbinds]), 
                           self.to_tensor(replay_pi[mbinds])]
                 self.tune_policy(*slices)
 
@@ -289,7 +290,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.aux_optimizer.zero_grad()
         
     def best_reward_model_select(self, samples):
-        self.timesteps_total += self.nbatch
+        self.timesteps_total += len(samples['dones'])
         
         ## Best reward model selection
         eprews = [info['episode']['r'] for info in samples['infos'] if 'episode' in info]
@@ -341,8 +342,7 @@ class CustomTorchPolicy(TorchPolicy):
             "best_weights": self.best_weights,
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
-            "num_retunes": self.retune_selector.num_retunes,
-#             "retune_selector": self.retune_selector,
+            "retune_selector": self.retune_selector,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
@@ -359,8 +359,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_weights = custom_state_vars["best_weights"]
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
-        self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
-#         self.retune_selector = custom_state_vars["num_retunes"]
+        self.retune_selector = custom_state_vars["retune_selector"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
@@ -377,24 +376,24 @@ class CustomTorchPolicy(TorchPolicy):
             k: v.cpu().detach().numpy()
             for k, v in self.model.state_dict().items()
         }
-        weights["optimizer_state"] = {
-            k: v
-            for k, v in self.optimizer.state_dict().items()
-        }
-        weights["aux_optimizer_state"] = {
-            k: v
-            for k, v in self.aux_optimizer.state_dict().items()
-        }
-        weights["custom_state_vars"] = self.get_custom_state_vars()
+#         weights["optimizer_state"] = {
+#             k: v
+#             for k, v in self.optimizer.state_dict().items()
+#         }
+#         weights["aux_optimizer_state"] = {
+#             k: v
+#             for k, v in self.aux_optimizer.state_dict().items()
+#         }
+#         weights["custom_state_vars"] = self.get_custom_state_vars()
         return weights
         
     
     @override(TorchPolicy)
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
-        self.set_optimizer_state(weights["optimizer_state"])
-        self.set_aux_optimizer_state(weights["aux_optimizer_state"])
-        self.set_custom_state_vars(weights["custom_state_vars"])
+#         self.set_optimizer_state(weights["optimizer_state"])
+#         self.set_aux_optimizer_state(weights["aux_optimizer_state"])
+#         self.set_custom_state_vars(weights["custom_state_vars"])
         
     def set_aux_optimizer_state(self, aux_optimizer_state):
         aux_optimizer_state = convert_to_torch_tensor(aux_optimizer_state, device=self.device)

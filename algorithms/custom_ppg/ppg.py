@@ -2,7 +2,8 @@ import logging
 
 from ray.rllib.agents import with_common_config
 from .custom_torch_ppg import CustomTorchPolicy
-from ray.rllib.agents.trainer_template import build_trainer
+# from ray.rllib.agents.trainer_template import build_trainer
+from .custom_trainer_template import build_trainer
 
 logger = logging.getLogger(__name__)
 
