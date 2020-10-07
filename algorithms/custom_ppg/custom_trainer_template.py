@@ -202,6 +202,7 @@ def build_trainer(name,
                 replay_compressed = compress(policy.exp_replay, level=9)
                 if getsizeof(replay_compressed) < 3_500_000_000:
                     state["replay_buffer"] = replay_compressed
+                    state["buffer_info"] = [policy.exp_replay.shape, policy.exp_replay.dtype]
                     policy.save_success = 2
     #                 print("Compression Success", getsizeof(replay_compressed))
                 else:
@@ -224,7 +225,9 @@ def build_trainer(name,
                 if isinstance(replay_buffer, np.ndarray):
                     policy.exp_replay = replay_buffer
                 else:
-                    policy.exp_replay = decompress(replay_buffer)
+                    buffshape, buffdtype = state["buffer_info"]
+                    policy.exp_replay = np.array(np.frombuffer(decompress(replay_buffer), 
+                                                               buffdtype).reshape(buffshape))
                 policy.vtarg_replay = state["vtarg_replay"]
             if self.train_exec_impl:
                 self.train_exec_impl.shared_metrics.get().restore(
