@@ -4,6 +4,15 @@ from collections import deque
 from skimage.util import view_as_windows
 
 torch, nn = try_import_torch()
+import torch.distributions as td
+from functools import partial
+
+def _make_categorical(x, ncat, shape):
+    x = x.reshape((x.shape[0], shape, ncat))
+    return td.Categorical(logits=x)
+
+def dist_build(ac_space):
+    return partial(_make_categorical, shape=1, ncat=ac_space.n)
 
 def neglogp_actions(pi_logits, actions):
     return nn.functional.cross_entropy(pi_logits, actions, reduction='none')
