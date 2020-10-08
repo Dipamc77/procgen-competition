@@ -9,7 +9,7 @@ procgen-ppo:
 
 
     # === Settings for Checkpoints ===
-    checkpoint_freq: 100
+    checkpoint_freq: 25
     checkpoint_at_end: True
     keep_checkpoints_num: 5
 
@@ -46,18 +46,18 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 6
-        n_pi: 2
-        num_retunes: 20
+        skips: 0
+        n_pi: 10
+        num_retunes: 100
         retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
         augment_buffer: False
-        scale_reward: 1.0
+        scale_reward: 0.6
         
         adaptive_gamma: False
         final_lr: 2.0e-4
-        lr_schedule: 'linear'
+        lr_schedule: 'None'
         final_entropy_coeff: 0.002
         entropy_schedule: False
         
@@ -87,7 +87,7 @@ procgen-ppo:
                 init_normed: True
                 use_layernorm: False
 
-        num_workers: 4
+        num_workers: 7
         num_envs_per_worker: 16
 
         rollout_fragment_length: 256

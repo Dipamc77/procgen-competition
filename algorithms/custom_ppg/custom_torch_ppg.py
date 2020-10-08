@@ -75,7 +75,7 @@ class CustomTorchPolicy(TorchPolicy):
                                               num_retunes = self.config['num_retunes'])
         
         replay_shape = (n_pi, nsteps, nenvs)
-        self.exp_replay = np.empty((*replay_shape, *observation_space.shape), dtype=np.uint8)
+        self.exp_replay = np.zeros((*replay_shape, *observation_space.shape), dtype=np.uint8)
         self.vtarg_replay = np.empty(replay_shape, dtype=np.float32)
         self.save_success = 0
         self.target_timesteps = 8_000_000
@@ -335,7 +335,7 @@ class CustomTorchPolicy(TorchPolicy):
             "best_weights": self.best_weights,
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
-            "retune_selector": self.retune_selector,
+#             "retune_selector": self.retune_selector,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
@@ -352,7 +352,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_weights = custom_state_vars["best_weights"]
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
-        self.retune_selector = custom_state_vars["retune_selector"]
+#         self.retune_selector = custom_state_vars["retune_selector"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
