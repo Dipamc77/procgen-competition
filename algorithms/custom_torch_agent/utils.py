@@ -94,7 +94,6 @@ class RetuneSelector:
     def __init__(self, nbatch, ob_space, ac_space, skips = 800_000, replay_size = 200_000, num_retunes = 5):
         self.skips = skips + (-skips) % nbatch
         self.replay_size = replay_size + (-replay_size) % nbatch
-        self.exp_replay = np.empty((self.replay_size, *ob_space.shape), dtype=np.uint8)
         self.batch_size = nbatch
         self.batches_in_replay = self.replay_size // nbatch
         
@@ -106,7 +105,7 @@ class RetuneSelector:
         self.replay_index = 0
         self.buffer_full = False
 
-    def update(self, obs_batch):
+    def update(self, obs_batch, exp_replay):
         if self.num_retunes == 0:
             return False
         
@@ -116,7 +115,7 @@ class RetuneSelector:
         
         start = self.replay_index * self.batch_size
         end = start + self.batch_size
-        self.exp_replay[start:end] = obs_batch
+        exp_replay[start:end] = obs_batch
         
         self.replay_index = (self.replay_index + 1) % self.batches_in_replay
         self.buffer_full = self.buffer_full or (self.replay_index == 0)
@@ -144,9 +143,8 @@ class RewardNormalizer(object):
     def normalize(self, rews, news):
         self.ret = self.ret * self.gamma + rews
         self.ret_rms.update(self.ret)
-#         rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-#         self.ret[np.array(news, dtype=bool)] = 0. ## Values should be True of False to set positional index
-        rews = np.float32(rews > 0)
+        rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+        self.ret[np.array(news, dtype=bool)] = 0. ## Values should be True of False to set positional index
         return rews
     
 class RunningMeanStd(object):
