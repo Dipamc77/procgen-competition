@@ -2,7 +2,9 @@ import logging
 
 from ray.rllib.agents import with_common_config
 from .custom_torch_policy import CustomTorchPolicy
-from ray.rllib.agents.trainer_template import build_trainer
+# from ray.rllib.agents.trainer_template import build_trainer
+from .custom_trainer_template import build_trainer
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,8 @@ DEFAULT_CONFIG = with_common_config({
     "entropy_schedule": True,
     
     "max_minibatch_size": 2048,
-    "updates_per_batch": 8, 
+    "updates_per_batch": 8,
+    "scale_reward": 1.0,
 })
 # __sphinx_doc_end__
 # yapf: enable

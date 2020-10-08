@@ -68,7 +68,7 @@ class CustomTorchPolicy(TorchPolicy):
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
-        
+        self.exp_replay = np.zeros((self.retune_selector.replay_size, *observation_space.shape), dtype=np.uint8)
         
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
@@ -81,6 +81,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.ent_coef = config['entropy_coeff']
         
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
+        self.save_success = 0
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -118,20 +119,17 @@ class CustomTorchPolicy(TorchPolicy):
         else:
             mb_rewards = unroll(samples['rewards'], ts)
         
+        # Weird hack that helps in many envs (Yes keep it after reward normalization)
+        rew_scale = self.config["scale_reward"]
+        if rew_scale != 1.0:
+            mb_rewards *= rew_scale
+        
         should_skip_train_step = self.best_reward_model_select(samples)
         if should_skip_train_step:
             self.update_batch_time()
             return {} # Not doing last optimization step - This is intentional due to noisy gradients
           
         obs = samples['obs']
-        ## Distill with augmentation
-        should_retune = self.retune_selector.update(obs)
-        if should_retune:
-            self.retune_with_augmentation(obs)
-            self.update_batch_time()
-            return {}
-         
-        
 
         ## Value prediction
         next_obs = unroll(samples['new_obs'], ts)[-1]
@@ -140,8 +138,6 @@ class CustomTorchPolicy(TorchPolicy):
         for start in range(0, nbatch, nbatch_train): # Causes OOM up if trying to do all at once
             end = start + nbatch_train
             values[start:end], _ = self.model.vf_pi(samples['obs'][start:end], ret_numpy=True, no_grad=True, to_torch=True)
-        
-        
         
         ## GAE
         mb_values = unroll(values, ts)
@@ -189,7 +185,14 @@ class CustomTorchPolicy(TorchPolicy):
                 apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 self._batch_train(apply_grad, self.accumulate_train_batches,
                                   lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
-
+        
+        ## Distill with augmentation
+        should_retune = self.retune_selector.update(obs, self.exp_replay)
+        if should_retune:
+            self.retune_with_augmentation()
+            self.update_batch_time()
+            return {}
+                
         self.update_gamma(samples)
         self.update_lr()
         self.update_ent_coef()
@@ -208,9 +211,6 @@ class CustomTorchPolicy(TorchPolicy):
         
         for g in self.optimizer.param_groups:
             g['lr'] = lr
-        # Advantages are normalized with full size batch instead of memory limited batch
-#         advs = returns - values 
-#         advs = (advs - torch.mean(advs)) / (torch.std(advs) + 1e-8)
         vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
         neglogpac = neglogp_actions(pi_logits, actions)
         entropy = torch.mean(pi_entropy(pi_logits))
@@ -236,7 +236,7 @@ class CustomTorchPolicy(TorchPolicy):
             self.optimizer.zero_grad()
 
         
-    def retune_with_augmentation(self, obs):
+    def retune_with_augmentation(self):
         nbatch_train = self.mem_limited_batch_size 
         retune_epochs = self.config['retune_epochs']
         replay_size = self.retune_selector.replay_size
@@ -246,13 +246,13 @@ class CustomTorchPolicy(TorchPolicy):
         # Store current value function and policy logits
         for start in range(0, replay_size, nbatch_train):
             end = start + nbatch_train
-            replay_batch = self.retune_selector.exp_replay[start:end]
+            replay_batch = self.exp_replay[start:end]
             replay_vf[start:end], replay_pi[start:end] = self.model.vf_pi(replay_batch, 
                                                                           ret_numpy=True, no_grad=True, to_torch=True)
         
         optim_count = 0
         # Tune vf and pi heads to older predictions with augmented observations
-        inds = np.arange(len(self.retune_selector.exp_replay))
+        inds = np.arange(len(self.exp_replay))
         for ep in range(retune_epochs):
             np.random.shuffle(inds)
             for start in range(0, replay_size, nbatch_train):
@@ -260,11 +260,12 @@ class CustomTorchPolicy(TorchPolicy):
                 mbinds = inds[start:end]
                 optim_count += 1
                 apply_grad = (optim_count % self.accumulate_train_batches) == 0
-                slices = [self.retune_selector.exp_replay[mbinds], 
+                slices = [self.exp_replay[mbinds], 
                           self.to_tensor(replay_vf[mbinds]), 
                           self.to_tensor(replay_pi[mbinds])]
                 self.tune_policy(apply_grad, *slices, 0.5)
-
+        
+        self.exp_replay.fill(0)
         self.retune_selector.retune_done()
  
     def tune_policy(self, apply_grad, obs, target_vf, target_pi, retune_vf_loss_coeff):
@@ -343,7 +344,6 @@ class CustomTorchPolicy(TorchPolicy):
             "best_weights": self.best_weights,
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
-            "num_retunes": self.retune_selector.num_retunes,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
@@ -360,7 +360,6 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_weights = custom_state_vars["best_weights"]
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
-        self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]

@@ -126,7 +126,7 @@ class CustomTorchPolicy(TorchPolicy):
         else:
             mb_rewards = unroll(samples['rewards'], ts)
        
-        # Weird hack that helps in many envs (Yes keep it after normalization)
+        # Weird hack that helps in many envs (Yes keep it after reward normalization)
         rew_scale = self.config["scale_reward"]
         if rew_scale != 1.0:
             mb_rewards *= rew_scale
@@ -253,7 +253,9 @@ class CustomTorchPolicy(TorchPolicy):
         for ep in range(retune_epochs):
             for slices in self.retune_selector.make_minibatches_with_rollouts(self.exp_replay, self.vtarg_replay, replay_pi):
                 self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]))
-
+                
+        self.exp_replay.fill(0)
+        self.vtarg_replay.fill(0)
         self.retune_selector.retune_done()
  
     def tune_policy(self, obs, target_vf, target_pi):
@@ -335,7 +337,6 @@ class CustomTorchPolicy(TorchPolicy):
             "best_weights": self.best_weights,
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
-#             "retune_selector": self.retune_selector,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
@@ -352,7 +353,6 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_weights = custom_state_vars["best_weights"]
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
-#         self.retune_selector = custom_state_vars["retune_selector"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
