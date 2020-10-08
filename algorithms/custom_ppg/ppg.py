@@ -2,8 +2,8 @@ import logging
 
 from ray.rllib.agents import with_common_config
 from .custom_torch_ppg import CustomTorchPolicy
-# from ray.rllib.agents.trainer_template import build_trainer
-from .custom_trainer_template import build_trainer
+from ray.rllib.agents.trainer_template import build_trainer
+# from .custom_trainer_template import build_trainer
 
 logger = logging.getLogger(__name__)
 
@@ -71,21 +71,23 @@ DEFAULT_CONFIG = with_common_config({
     "use_pytorch": True,
     
     # Custom swithches
-    "retune_skips": 300000,
-    "retune_replay_size": 200000,
-    "num_retunes": 6,
-    "retune_epochs": 3,
-    "standardize_rewards": False,
+    "skips": 0,
+    "n_pi": 32,
+    "num_retunes": 100,
+    "retune_epochs": 6,
+    "standardize_rewards": True,
+    "scale_reward": 1.0,
     "accumulate_train_batches": 1,
     "adaptive_gamma": False, 
-    "final_lr": 1e-4,
-    "lr_schedule": True,
+    "final_lr": 2e-4,
+    "lr_schedule": 'None',
     "final_entropy_coeff": 0.002,
-    "entropy_schedule": True,
+    "entropy_schedule": False,
     
     "max_minibatch_size": 2048,
     "updates_per_batch": 8, 
-    "aux_mbsize": 512,
+    "aux_mbsize": 4,
+    "augment_buffer": False,
 })
 # __sphinx_doc_end__
 # yapf: enable
