@@ -6,6 +6,7 @@ from skimage.util import view_as_windows
 torch, nn = try_import_torch()
 import torch.distributions as td
 from functools import partial
+import itertools
 
 def _make_categorical(x, ncat, shape):
     x = x.reshape((x.shape[0], shape, ncat))
@@ -98,22 +99,22 @@ class AdaptiveDiscountTuner:
             gtarg = horizon_to_gamma(htarg)
             self.gamma = self.gamma * self.momentum + gtarg * (1-self.momentum)
         return self.gamma
-
+    
+def flatten01(arr):
+    return arr.reshape(-1, *arr.shape[2:])
+    
 class RetuneSelector:
-    def __init__(self, nbatch, ob_space, ac_space, skips = 800_000, replay_size = 200_000, num_retunes = 5):
-        self.skips = skips + (-skips) % nbatch
-        self.replay_size = replay_size + (-replay_size) % nbatch
-        
-        self.batch_size = nbatch
-        self.batches_in_replay = self.replay_size // nbatch
+    def __init__(self, nenvs, ob_space, ac_space, skips = 0, n_pi = 32, num_retunes = 5):
+        self.skips = skips
+        self.n_pi = n_pi
+        self.nenvs = nenvs
         
         self.num_retunes = num_retunes
         self.ac_space = ac_space
         self.ob_space = ob_space
         
-        self.cooldown_counter = self.skips // self.batch_size
+        self.cooldown_counter = 0
         self.replay_index = 0
-        self.buffer_full = False
 
     def update(self, obs_batch, vtarg_batch, exp_replay, vtarg_replay):
         if self.num_retunes == 0:
@@ -123,26 +124,29 @@ class RetuneSelector:
             self.cooldown_counter -= 1
             return False
         
-        start = self.replay_index * self.batch_size
-        end = start + self.batch_size
-        exp_replay[start:end] = obs_batch
-        vtarg_replay[start:end] = vtarg_batch
-
+        exp_replay[self.replay_index] = obs_batch
+        vtarg_replay[self.replay_index] = vtarg_batch
         
-        self.replay_index = (self.replay_index + 1) % self.batches_in_replay
-        self.buffer_full = self.buffer_full or (self.replay_index == 0)
-        
-        return self.buffer_full
+        self.replay_index = (self.replay_index + 1) % self.n_pi
+        return self.replay_index == 0
         
     def retune_done(self):
-        self.cooldown_counter = self.skips // self.batch_size
+        self.cooldown_counter = self.skips
         self.num_retunes -= 1
         self.replay_index = 0
-        self.buffer_full = False
         
-    def set_num_retunes(self, nr):
-        self.num_retunes = nr
-
+        
+    def make_minibatches_with_rollouts(self, exp_replay, vtarg_replay, presleep_pi, num_rollouts=4):
+            env_segs = list(itertools.product(range(self.n_pi), range(self.nenvs)))
+            np.random.shuffle(env_segs)
+            env_segs = np.array(env_segs)
+            for idx in range(0, len(env_segs), num_rollouts):
+                esinds = env_segs[idx:idx+num_rollouts]
+                mbatch = [flatten01(arr[esinds[:,0], : , esinds[:,1]]) 
+                          for arr in (exp_replay, vtarg_replay, presleep_pi)]
+                yield mbatch
+   
+        
 class RewardNormalizer(object):
     # https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm
     def __init__(self, gamma=0.99, cliprew=10.0, epsilon=1e-8):

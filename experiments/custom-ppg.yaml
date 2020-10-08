@@ -9,7 +9,7 @@ procgen-ppo:
 
 
     # === Settings for Checkpoints ===
-    checkpoint_freq: 100
+    checkpoint_freq: 25
     checkpoint_at_end: True
     keep_checkpoints_num: 5
 
@@ -46,16 +46,18 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        retune_skips: 300000
-        retune_replay_size: 200000
-        num_retunes: 20
+        skips: 0
+        n_pi: 10
+        num_retunes: 100
         retune_epochs: 6
         standardize_rewards: True
-        aux_mbsize: 1024
+        aux_mbsize: 4
+        augment_buffer: False
+        scale_reward: 0.6
         
         adaptive_gamma: False
         final_lr: 2.0e-4
-        lr_schedule: 'linear'
+        lr_schedule: 'None'
         final_entropy_coeff: 0.002
         entropy_schedule: False
         
@@ -78,10 +80,10 @@ procgen-ppo:
         model:
             custom_model: impala_torch_ppg
             custom_options: 
-#                 depths: [64, 128, 128]
-#                 nlatents: 1024
-                depths: [32, 64, 64]
-                nlatents: 512
+                depths: [16, 32, 32]
+                nlatents: 256
+#                 depths: [32, 64, 64]
+#                 nlatents: 512
                 init_normed: True
                 use_layernorm: False
 

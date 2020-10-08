@@ -58,7 +58,10 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_rew_tsteps = 0
         
         nw = self.config['num_workers'] if self.config['num_workers'] > 0 else 1
-        self.nbatch = nw * self.config['num_envs_per_worker'] * self.config['rollout_fragment_length']
+        nenvs = nw * self.config['num_envs_per_worker']
+        nsteps = self.config['rollout_fragment_length']
+        n_pi = self.config['n_pi']
+        self.nbatch = nenvs * nsteps
         self.actual_batch_size = self.nbatch // self.config['updates_per_batch']
         self.accumulate_train_batches = int(np.ceil( self.actual_batch_size / self.config['max_minibatch_size'] ))
         self.mem_limited_batch_size = self.actual_batch_size // self.accumulate_train_batches
@@ -66,13 +69,14 @@ class CustomTorchPolicy(TorchPolicy):
             print("#################################################")
             print("WARNING: MEMORY LIMITED BATCHING NOT SET PROPERLY")
             print("#################################################")
-        self.retune_selector = RetuneSelector(self.nbatch, observation_space, action_space, 
-                                              skips = self.config['retune_skips'], 
-                                              replay_size = self.config['retune_replay_size'], 
+        self.retune_selector = RetuneSelector(nenvs, observation_space, action_space, 
+                                              skips = self.config['skips'], 
+                                              n_pi = n_pi,
                                               num_retunes = self.config['num_retunes'])
         
-        self.exp_replay = np.zeros((self.retune_selector.replay_size, *observation_space.shape), dtype=np.uint8)
-        self.vtarg_replay = np.zeros((self.retune_selector.replay_size), dtype=np.float32)
+        replay_shape = (n_pi, nsteps, nenvs)
+        self.exp_replay = np.zeros((*replay_shape, *observation_space.shape), dtype=np.uint8)
+        self.vtarg_replay = np.empty(replay_shape, dtype=np.float32)
         self.save_success = 0
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
@@ -121,6 +125,11 @@ class CustomTorchPolicy(TorchPolicy):
             self.last_dones = mb_dones[-1]
         else:
             mb_rewards = unroll(samples['rewards'], ts)
+       
+        # Weird hack that helps in many envs (Yes keep it after normalization)
+        rew_scale = self.config["scale_reward"]
+        if rew_scale != 1.0:
+            mb_rewards *= rew_scale
         
         should_skip_train_step = self.best_reward_model_select(samples)
         if should_skip_train_step:
@@ -181,7 +190,7 @@ class CustomTorchPolicy(TorchPolicy):
                                   lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
 
         ## Distill with aux head
-        should_retune = self.retune_selector.update(obs, returns, self.exp_replay, self.vtarg_replay)
+        should_retune = self.retune_selector.update(unroll(obs, ts), mb_returns, self.exp_replay, self.vtarg_replay)
         if should_retune:
             self.aux_train()
             self.update_batch_time()
@@ -231,43 +240,34 @@ class CustomTorchPolicy(TorchPolicy):
         for g in self.aux_optimizer.param_groups:
             g['lr'] = self.lr
         nbatch_train = self.mem_limited_batch_size 
-        aux_nbatch_train = self.config['aux_mbsize'] 
         retune_epochs = self.config['retune_epochs']
-        replay_size = self.retune_selector.replay_size
-        replay_pi = np.empty((replay_size, self.retune_selector.ac_space.n), dtype=np.float32)
+        replay_shape = self.vtarg_replay.shape
+        replay_pi = np.empty((*replay_shape, self.retune_selector.ac_space.n), dtype=np.float32)
 
-        # Store current value function and policy logits
-        for start in range(0, replay_size, nbatch_train):
-            end = start + nbatch_train
-            replay_batch = self.exp_replay[start:end]
-            _, replay_pi[start:end] = self.model.vf_pi(replay_batch, 
-                                                       ret_numpy=True, no_grad=True, to_torch=True)
+        for nnpi in range(self.retune_selector.n_pi):
+            for ne in range(self.retune_selector.nenvs):
+                _, replay_pi[nnpi, :, ne] = self.model.vf_pi(self.exp_replay[nnpi, :, ne], 
+                                                             ret_numpy=True, no_grad=True, to_torch=True)
         
-        optim_count = 0
-        # Tune vf and pi heads to older predictions with augmented observations
-        inds = np.arange(len(self.exp_replay))
+        # Tune vf and pi heads to older predictions with (augmented?) observations
         for ep in range(retune_epochs):
-            np.random.shuffle(inds)
-            for start in range(0, replay_size, aux_nbatch_train):
-                end = start + aux_nbatch_train
-                mbinds = inds[start:end]
-                optim_count += 1
-                slices = [self.exp_replay[mbinds], 
-                          self.to_tensor(self.vtarg_replay[mbinds]), 
-                          self.to_tensor(replay_pi[mbinds])]
-                self.tune_policy(*slices)
+            for slices in self.retune_selector.make_minibatches_with_rollouts(self.exp_replay, self.vtarg_replay, replay_pi):
+                self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]))
 
         self.retune_selector.retune_done()
  
     def tune_policy(self, obs, target_vf, target_pi):
-        obs_aug = np.empty(obs.shape, obs.dtype)
-        aug_idx = np.random.randint(6, size=len(obs))
-        obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
-        obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
-        obs_aug[aug_idx >= 2] = obs[aug_idx >= 2]
-        obs_aug = self.to_tensor(obs_aug)
+        if self.config['augment_buffer']:
+            obs_aug = np.empty(obs.shape, obs.dtype)
+            aug_idx = np.random.randint(6, size=len(obs))
+            obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
+            obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
+            obs_aug[aug_idx >= 2] = obs[aug_idx >= 2]
+            obs_in = self.to_tensor(obs_aug)
+        else:
+            obs_in = self.to_tensor(obs)
         
-        vpred, pi_logits = self.model.vf_pi(obs_aug, ret_numpy=False, no_grad=False, to_torch=False)
+        vpred, pi_logits = self.model.vf_pi(obs_in, ret_numpy=False, no_grad=False, to_torch=False)
         aux_vpred = self.model.aux_value_function()
         vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
         aux_loss = .5 * torch.mean(torch.pow(aux_vpred - target_vf, 2))
@@ -335,7 +335,7 @@ class CustomTorchPolicy(TorchPolicy):
             "best_weights": self.best_weights,
             "reward_deque": self.reward_deque,
             "batch_end_time": self.batch_end_time,
-            "retune_selector": self.retune_selector,
+#             "retune_selector": self.retune_selector,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
             "lr": self.lr,
@@ -352,7 +352,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_weights = custom_state_vars["best_weights"]
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
-        self.retune_selector = custom_state_vars["retune_selector"]
+#         self.retune_selector = custom_state_vars["retune_selector"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
