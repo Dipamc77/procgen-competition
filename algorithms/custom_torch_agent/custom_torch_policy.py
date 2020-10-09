@@ -346,6 +346,7 @@ class CustomTorchPolicy(TorchPolicy):
             "batch_end_time": self.batch_end_time,
             "gamma": self.gamma,
             "maxrewep_lenbuf": self.maxrewep_lenbuf,
+            "num_retunes": self.retune_selector.num_retunes,
             "lr": self.lr,
             "ent_coef": self.ent_coef,
             "rewnorm": self.rewnorm,
@@ -361,6 +362,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.reward_deque = custom_state_vars["reward_deque"]
         self.batch_end_time = custom_state_vars["batch_end_time"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
+        self.retune_selector.set_num_retunes(custom_state_vars["num_retunes"])
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
         self.lr =custom_state_vars["lr"]
         self.ent_coef = custom_state_vars["ent_coef"]

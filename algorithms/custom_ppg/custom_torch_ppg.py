@@ -369,24 +369,24 @@ class CustomTorchPolicy(TorchPolicy):
             k: v.cpu().detach().numpy()
             for k, v in self.model.state_dict().items()
         }
-#         weights["optimizer_state"] = {
-#             k: v
-#             for k, v in self.optimizer.state_dict().items()
-#         }
-#         weights["aux_optimizer_state"] = {
-#             k: v
-#             for k, v in self.aux_optimizer.state_dict().items()
-#         }
-#         weights["custom_state_vars"] = self.get_custom_state_vars()
+        weights["optimizer_state"] = {
+            k: v
+            for k, v in self.optimizer.state_dict().items()
+        }
+        weights["aux_optimizer_state"] = {
+            k: v
+            for k, v in self.aux_optimizer.state_dict().items()
+        }
+        weights["custom_state_vars"] = self.get_custom_state_vars()
         return weights
         
     
     @override(TorchPolicy)
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
-#         self.set_optimizer_state(weights["optimizer_state"])
-#         self.set_aux_optimizer_state(weights["aux_optimizer_state"])
-#         self.set_custom_state_vars(weights["custom_state_vars"])
+        self.set_optimizer_state(weights["optimizer_state"])
+        self.set_aux_optimizer_state(weights["aux_optimizer_state"])
+        self.set_custom_state_vars(weights["custom_state_vars"])
         
     def set_aux_optimizer_state(self, aux_optimizer_state):
         aux_optimizer_state = convert_to_torch_tensor(aux_optimizer_state, device=self.device)
