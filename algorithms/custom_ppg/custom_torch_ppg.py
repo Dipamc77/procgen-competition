@@ -80,7 +80,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.save_success = 0
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
-        self.max_time = 7200
+        self.max_time = 100000000
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
@@ -90,6 +90,7 @@ class CustomTorchPolicy(TorchPolicy):
         
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
         self.make_distr = dist_build(action_space)
+        self.retunes_completed = 0
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -256,6 +257,7 @@ class CustomTorchPolicy(TorchPolicy):
                 
         self.exp_replay.fill(0)
         self.vtarg_replay.fill(0)
+        self.retunes_completed += 1
         self.retune_selector.retune_done()
  
     def tune_policy(self, obs, target_vf, target_pi):
@@ -345,6 +347,7 @@ class CustomTorchPolicy(TorchPolicy):
             "best_rew_tsteps": self.best_rew_tsteps,
             "best_reward": self.best_reward,
             "last_dones": self.last_dones,
+            "retunes_completed": self.retunes_completed,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -355,12 +358,13 @@ class CustomTorchPolicy(TorchPolicy):
         self.batch_end_time = custom_state_vars["batch_end_time"]
         self.gamma = self.adaptive_discount_tuner.gamma = custom_state_vars["gamma"]
         self.maxrewep_lenbuf = custom_state_vars["maxrewep_lenbuf"]
-        self.lr =custom_state_vars["lr"]
+        self.lr = custom_state_vars["lr"]
         self.ent_coef = custom_state_vars["ent_coef"]
         self.rewnorm = custom_state_vars["rewnorm"]
         self.best_rew_tsteps = custom_state_vars["best_rew_tsteps"]
         self.best_reward = custom_state_vars["best_reward"]
         self.last_dones = custom_state_vars["last_dones"]
+        self.retunes_completed = custom_state_vars["retunes_completed"]
     
     @override(TorchPolicy)
     def get_weights(self):
@@ -369,24 +373,24 @@ class CustomTorchPolicy(TorchPolicy):
             k: v.cpu().detach().numpy()
             for k, v in self.model.state_dict().items()
         }
-        weights["optimizer_state"] = {
-            k: v
-            for k, v in self.optimizer.state_dict().items()
-        }
-        weights["aux_optimizer_state"] = {
-            k: v
-            for k, v in self.aux_optimizer.state_dict().items()
-        }
-        weights["custom_state_vars"] = self.get_custom_state_vars()
+#         weights["optimizer_state"] = {
+#             k: v
+#             for k, v in self.optimizer.state_dict().items()
+#         }
+#         weights["aux_optimizer_state"] = {
+#             k: v
+#             for k, v in self.aux_optimizer.state_dict().items()
+#         }
+#         weights["custom_state_vars"] = self.get_custom_state_vars()
         return weights
         
     
     @override(TorchPolicy)
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
-        self.set_optimizer_state(weights["optimizer_state"])
-        self.set_aux_optimizer_state(weights["aux_optimizer_state"])
-        self.set_custom_state_vars(weights["custom_state_vars"])
+#         self.set_optimizer_state(weights["optimizer_state"])
+#         self.set_aux_optimizer_state(weights["aux_optimizer_state"])
+#         self.set_custom_state_vars(weights["custom_state_vars"])
         
     def set_aux_optimizer_state(self, aux_optimizer_state):
         aux_optimizer_state = convert_to_torch_tensor(aux_optimizer_state, device=self.device)
