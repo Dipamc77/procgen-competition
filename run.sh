@@ -6,8 +6,8 @@ set -e
 #########################################
 
 # export EXPERIMENT_DEFAULT="experiments/impala-baseline.yaml"
-#export EXPERIMENT_DEFAULT="experiments/custom-torch-ppo.yaml"
-export EXPERIMENT_DEFAULT="experiments/custom-ppg.yaml"
+export EXPERIMENT_DEFAULT="experiments/custom-torch-ppo.yaml"
+# export EXPERIMENT_DEFAULT="experiments/custom-ppg.yaml"
 export EXPERIMENT=${EXPERIMENT:-$EXPERIMENT_DEFAULT}
 
 if [[ -z $AICROWD_IS_GRADING ]]; then
