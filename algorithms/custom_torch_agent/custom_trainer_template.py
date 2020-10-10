@@ -196,40 +196,39 @@ def build_trainer(name,
             state["optimizer_state"] = {k: v for k, v in policy.optimizer.state_dict().items()}
             
             ## Ugly hack to save replay buffer because organizers taking forever to give fix for spot instances
-            save_success = False
-            max_size = 3_700_000_000
-            if policy.exp_replay.nbytes < max_size:
-                state["replay_buffer"] = policy.exp_replay
-                state["buffer_saved"] = 1
-                policy.save_success  = 1
-                save_success = True
-            elif policy.exp_replay.shape[-1] == 6: # only for frame stack = 2
-                eq = np.all(policy.exp_replay[1:,...,:3] == policy.exp_replay[:-1,...,-3:], axis=(-3,-2,-1))
-                non_eq = np.where(1 - eq)
-                images_non_eq = policy.exp_replay[non_eq]
-                images_last = policy.exp_replay[-1,...,-3:]
-                images_first = policy.exp_replay[0,...,:3]
-                if policy.exp_replay[1:,...,:3].nbytes < max_size:
-                    state["sliced_buffer"] = policy.exp_replay[1:,...,:3]
-                    state["buffer_saved"] = 2
-                    policy.save_success  = 2
-                    save_success = True
-                else:
-                    comp = compress(policy.exp_replay[1:,...,:3].copy(), level=9)
-                    if getsizeof(comp) < max_size:
-                        state["compressed_buffer"] = comp
-                        state["buffer_saved"] = 3
-                        policy.save_success  = 3
-                        save_success = True
-                if save_success:
-                    state["matched_frame_data"] = [non_eq, images_non_eq, images_last, images_first]
-            
-            if not save_success:   
-                state["buffer_saved"] = -1
-                policy.save_success  = -1
-                print("####################### BUFFER SAVE FAILED #########################")
-            else:
-                state["retune_selector"] = policy.retune_selector
+#             save_success = False
+#             max_size = 3_700_000_000
+#             if policy.exp_replay.nbytes < max_size:
+#                 state["replay_buffer"] = policy.exp_replay
+#                 state["buffer_saved"] = 1
+#                 policy.save_success  = 1
+#                 save_success = True
+#             elif policy.exp_replay.shape[-1] == 6: # only for frame stack = 2
+#                 eq = np.all(policy.exp_replay[1:,...,:3] == policy.exp_replay[:-1,...,-3:], axis=(-3,-2,-1))
+#                 non_eq = np.where(1 - eq)
+#                 images_non_eq = policy.exp_replay[non_eq]
+#                 images_last = policy.exp_replay[-1,...,-3:]
+#                 images_first = policy.exp_replay[0,...,:3]
+#                 if policy.exp_replay[1:,...,:3].nbytes < max_size:
+#                     state["sliced_buffer"] = policy.exp_replay[1:,...,:3]
+#                     state["buffer_saved"] = 2
+#                     policy.save_success  = 2
+#                     save_success = True
+#                 else:
+#                     comp = compress(policy.exp_replay[1:,...,:3].copy(), level=9)
+#                     if getsizeof(comp) < max_size:
+#                         state["compressed_buffer"] = comp
+#                         state["buffer_saved"] = 3
+#                         policy.save_success  = 3
+#                         save_success = True
+#                 if save_success:
+#                     state["matched_frame_data"] = [non_eq, images_non_eq, images_last, images_first]
+#             if not save_success:   
+#                 state["buffer_saved"] = -1
+#                 policy.save_success  = -1
+#                 print("####################### BUFFER SAVE FAILED #########################")
+#             else:
+#                 state["retune_selector"] = policy.retune_selector
                 
             
             if self.train_exec_impl:
@@ -245,24 +244,24 @@ def build_trainer(name,
             policy.set_custom_state_vars(state["custom_state_vars"])
 
             ## Ugly hack to save replay buffer because organizers taking forever to give fix for spot instances
-            buffer_saved = state.get("buffer_saved", -1)
-            policy.save_success  = buffer_saved
-            if buffer_saved == 1:
-                policy.exp_replay = state["replay_buffer"]
-            elif buffer_saved > 1:
-                non_eq, images_non_eq, images_last, images_first = state["matched_frame_data"]
-                policy.exp_replay[non_eq] = images_non_eq
-                policy.exp_replay[-1,...,-3:] = images_last
-                policy.exp_replay[0,...,:3] = images_first
-                if buffer_saved == 2:
-                    policy.exp_replay[1:,...,:3] = state["sliced_buffer"]
-                elif buffer_saved == 3:
-                    ts = policy.exp_replay[1:,...,:3].shape
-                    dt = policy.exp_replay.dtype
-                    decomp = decompress(state["compressed_buffer"])
-                    policy.exp_replay[1:,...,:3] = np.array(np.frombuffer(decomp, dtype=dt).reshape(ts))
-            if buffer_saved > 0:
-                policy.retune_selector = state["retune_selector"]
+#             buffer_saved = state.get("buffer_saved", -1)
+#             policy.save_success  = buffer_saved
+#             if buffer_saved == 1:
+#                 policy.exp_replay = state["replay_buffer"]
+#             elif buffer_saved > 1:
+#                 non_eq, images_non_eq, images_last, images_first = state["matched_frame_data"]
+#                 policy.exp_replay[non_eq] = images_non_eq
+#                 policy.exp_replay[-1,...,-3:] = images_last
+#                 policy.exp_replay[0,...,:3] = images_first
+#                 if buffer_saved == 2:
+#                     policy.exp_replay[1:,...,:3] = state["sliced_buffer"]
+#                 elif buffer_saved == 3:
+#                     ts = policy.exp_replay[1:,...,:3].shape
+#                     dt = policy.exp_replay.dtype
+#                     decomp = decompress(state["compressed_buffer"])
+#                     policy.exp_replay[1:,...,:3] = np.array(np.frombuffer(decomp, dtype=dt).reshape(ts))
+#             if buffer_saved > 0:
+#                 policy.retune_selector = state["retune_selector"]
                 
             if self.train_exec_impl:
                 self.train_exec_impl.shared_metrics.get().restore(

@@ -72,7 +72,7 @@ class CustomTorchPolicy(TorchPolicy):
         
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
-        self.max_time = 7200
+        self.max_time = 10000000000000 # ignore timekeeping because spot instances are messing it up
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
@@ -378,19 +378,19 @@ class CustomTorchPolicy(TorchPolicy):
             k: v.cpu().detach().numpy()
             for k, v in self.model.state_dict().items()
         }
-        weights["optimizer_state"] = {
-            k: v
-            for k, v in self.optimizer.state_dict().items()
-        }
-        weights["custom_state_vars"] = self.get_custom_state_vars()
+#         weights["optimizer_state"] = {
+#             k: v
+#             for k, v in self.optimizer.state_dict().items()
+#         }
+#         weights["custom_state_vars"] = self.get_custom_state_vars()
         return weights
         
     
     @override(TorchPolicy)
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
-        self.set_optimizer_state(weights["optimizer_state"])
-        self.set_custom_state_vars(weights["custom_state_vars"])
+#         self.set_optimizer_state(weights["optimizer_state"])
+#         self.set_custom_state_vars(weights["custom_state_vars"])
         
     def set_optimizer_state(self, optimizer_state):
         optimizer_state = convert_to_torch_tensor(optimizer_state, device=self.device)

@@ -9,7 +9,7 @@ procgen-ppo:
 
 
     # === Settings for Checkpoints ===
-    checkpoint_freq: 25
+    checkpoint_freq: 100
     checkpoint_at_end: True
     keep_checkpoints_num: 5
 
@@ -51,7 +51,7 @@ procgen-ppo:
         num_retunes: 8
         retune_epochs: 3
         standardize_rewards: True
-        scale_reward: 0.6
+        scale_reward: 0.4
         
         adaptive_gamma: False
         final_lr: 2.0e-4
