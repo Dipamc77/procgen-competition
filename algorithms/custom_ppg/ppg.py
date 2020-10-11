@@ -88,6 +88,7 @@ DEFAULT_CONFIG = with_common_config({
     "updates_per_batch": 8, 
     "aux_mbsize": 4,
     "augment_buffer": False,
+    "reset_returns": True,
 })
 # __sphinx_doc_end__
 # yapf: enable
