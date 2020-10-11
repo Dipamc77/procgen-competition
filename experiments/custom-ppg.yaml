@@ -47,14 +47,14 @@ procgen-ppo:
         
         # Custom switches
         skips: 0
-        n_pi: 16
+        n_pi: 9
         num_retunes: 100
         retune_epochs: 3
         standardize_rewards: True
         aux_mbsize: 4
         augment_buffer: False
         scale_reward: 1.0
-        reset_returns: False
+        reset_returns: True
         
         adaptive_gamma: False
         final_lr: 2.0e-4
@@ -88,7 +88,7 @@ procgen-ppo:
                 use_layernorm: False
 
         num_workers: 7
-        num_envs_per_worker: 9
+        num_envs_per_worker: 16
 
         rollout_fragment_length: 256
 
