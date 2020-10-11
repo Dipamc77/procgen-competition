@@ -120,7 +120,7 @@ class CustomTorchPolicy(TorchPolicy):
         if self.config['standardize_rewards']:
             mb_origrewards = unroll(samples['rewards'], ts)
             mb_rewards =  np.zeros_like(mb_origrewards)
-            mb_rewards[0] = self.rewnorm.normalize(mb_origrewards[0], self.last_dones)
+            mb_rewards[0] = self.rewnorm.normalize(mb_origrewards[0], self.last_dones, self.config["reset_returns"])
             for ii in range(1, nsteps):
                 mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii], mb_dones[ii-1])
             self.last_dones = mb_dones[-1]
