@@ -82,6 +82,7 @@ class CustomTorchPolicy(TorchPolicy):
         
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
         self.save_success = 0
+        self.retunes_completed = 0
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -112,9 +113,11 @@ class CustomTorchPolicy(TorchPolicy):
         if self.config['standardize_rewards']:
             mb_origrewards = unroll(samples['rewards'], ts)
             mb_rewards =  np.zeros_like(mb_origrewards)
-            mb_rewards[0] = self.rewnorm.normalize(mb_origrewards[0], self.last_dones)
+            mb_rewards[0] = self.rewnorm.normalize(mb_origrewards[0], self.last_dones, 
+                                                   self.config["return_reset"])
             for ii in range(1, nsteps):
-                mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii], mb_dones[ii-1])
+                mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii], mb_dones[ii-1],
+                                                       self.config["return_reset"])
             self.last_dones = mb_dones[-1]
         else:
             mb_rewards = unroll(samples['rewards'], ts)
@@ -266,6 +269,7 @@ class CustomTorchPolicy(TorchPolicy):
                 self.tune_policy(apply_grad, *slices, 0.5)
         
         self.exp_replay.fill(0)
+        self.retunes_completed += 1
         self.retune_selector.retune_done()
  
     def tune_policy(self, apply_grad, obs, target_vf, target_pi, retune_vf_loss_coeff):
@@ -353,6 +357,7 @@ class CustomTorchPolicy(TorchPolicy):
             "best_rew_tsteps": self.best_rew_tsteps,
             "best_reward": self.best_reward,
             "last_dones": self.last_dones,
+            "retunes_completed": self.retunes_completed,
         }
     
     def set_custom_state_vars(self, custom_state_vars):
@@ -370,6 +375,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.best_rew_tsteps = custom_state_vars["best_rew_tsteps"]
         self.best_reward = custom_state_vars["best_reward"]
         self.last_dones = custom_state_vars["last_dones"]
+        self.retunes_completed = custom_state_vars["retunes_completed"]
     
     @override(TorchPolicy)
     def get_weights(self):

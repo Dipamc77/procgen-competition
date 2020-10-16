@@ -76,6 +76,8 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         nlatents = model_config['custom_options'].get('nlatents') or 256
         init_normed = model_config['custom_options'].get('init_normed') or False
         self.use_layernorm = model_config['custom_options'].get('use_layernorm') or True
+        self.diff_framestack = model_config['custom_options'].get('diff_framestack') or False
+
         
         h, w, c = obs_space.shape
         shape = (c, h, w)
@@ -107,6 +109,8 @@ class ImpalaCNN(TorchModelV2, nn.Module):
     @override(TorchModelV2)
     def forward(self, input_dict, state, seq_lens):
         x = input_dict["obs"].float()
+        if self.diff_framestack:
+            x[...,:-3] = x[...,:-3] - x[...,-3:] # only works for framestack 2 for now
         x = x / 255.0  # scale to 0-1
         x = x.permute(0, 3, 1, 2)  # NHWC => NCHW
         x = self.conv_seqs[0](x)
