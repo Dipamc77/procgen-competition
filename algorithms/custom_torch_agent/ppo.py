@@ -87,6 +87,7 @@ DEFAULT_CONFIG = with_common_config({
     "max_minibatch_size": 2048,
     "updates_per_batch": 8,
     "scale_reward": 1.0,
+    "return_reset": True,
 })
 # __sphinx_doc_end__
 # yapf: enable

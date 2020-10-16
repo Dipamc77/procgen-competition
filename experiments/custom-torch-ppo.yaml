@@ -51,7 +51,8 @@ procgen-ppo:
         num_retunes: 8
         retune_epochs: 3
         standardize_rewards: True
-        scale_reward: 0.4
+        scale_reward: 1.0
+        return_reset: False
         
         adaptive_gamma: False
         final_lr: 2.0e-4
@@ -81,6 +82,7 @@ procgen-ppo:
                 nlatents: 512
                 init_normed: False
                 use_layernorm: True
+                diff_framestack: True
 
         num_workers: 7
         num_envs_per_worker: 16
