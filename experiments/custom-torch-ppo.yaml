@@ -29,7 +29,7 @@ procgen-ppo:
             return_blind: 1
             return_max: 10
 
-        gamma: 0.996
+        gamma: 0.99
         lambda: 0.95
         lr: 5.0e-4
         # Number of SGD iterations in each outer loop
