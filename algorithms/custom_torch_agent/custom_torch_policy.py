@@ -69,7 +69,6 @@ class CustomTorchPolicy(TorchPolicy):
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
         self.exp_replay = np.zeros((self.retune_selector.replay_size, *observation_space.shape), dtype=np.uint8)
-        
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
         self.max_time = 10000000000000 # ignore timekeeping because spot instances are messing it up
