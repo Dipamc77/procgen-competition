@@ -46,16 +46,16 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        retune_skips: 300000
+        retune_skips: 450000
         retune_replay_size: 200000
-        num_retunes: 8
+        num_retunes: 11
         retune_epochs: 3
         standardize_rewards: True
         scale_reward: 1.0
         return_reset: False
         
         adaptive_gamma: False
-        final_lr: 1.0e-5
+        final_lr: 5.0e-5
         lr_schedule: 'linear'
         final_entropy_coeff: 0.002
         entropy_schedule: False
