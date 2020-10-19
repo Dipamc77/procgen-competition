@@ -38,7 +38,7 @@ procgen-ppo:
         entropy_coeff: 0.01
         clip_param: 0.2
         vf_clip_param: 0.2
-        grad_clip: 10.0
+        grad_clip: 0.5
         observation_filter: NoFilter
         vf_share_layers: True
         horizon: null
@@ -55,7 +55,7 @@ procgen-ppo:
         return_reset: False
         
         adaptive_gamma: False
-        final_lr: 5.0e-5
+        final_lr: 1.0e-5
         lr_schedule: 'linear'
         final_entropy_coeff: 0.002
         entropy_schedule: False
