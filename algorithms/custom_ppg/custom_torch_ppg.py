@@ -72,7 +72,8 @@ class CustomTorchPolicy(TorchPolicy):
         self.retune_selector = RetuneSelector(nenvs, observation_space, action_space, 
                                               skips = self.config['skips'], 
                                               n_pi = n_pi,
-                                              num_retunes = self.config['num_retunes'])
+                                              num_retunes = self.config['num_retunes'],
+                                              flat_buffer = self.config['flattened_buffer'])
         
         replay_shape = (n_pi, nsteps, nenvs)
         self.exp_replay = np.zeros((*replay_shape, *observation_space.shape), dtype=np.uint8)
@@ -263,7 +264,7 @@ class CustomTorchPolicy(TorchPolicy):
     def tune_policy(self, obs, target_vf, target_pi):
         if self.config['augment_buffer']:
             obs_aug = np.empty(obs.shape, obs.dtype)
-            aug_idx = np.random.randint(6, size=len(obs))
+            aug_idx = np.random.randint(self.config['augment_randint_num'], size=len(obs))
             obs_aug[aug_idx == 0] = pad_and_random_crop(obs[aug_idx == 0], 64, 10)
             obs_aug[aug_idx == 1] = random_cutout_color(obs[aug_idx == 1], 10, 30)
             obs_aug[aug_idx >= 2] = obs[aug_idx >= 2]

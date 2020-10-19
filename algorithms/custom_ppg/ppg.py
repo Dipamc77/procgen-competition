@@ -89,6 +89,8 @@ DEFAULT_CONFIG = with_common_config({
     "aux_mbsize": 4,
     "augment_buffer": False,
     "reset_returns": True,
+    "flattened_buffer": False,
+    "augment_randint_num": 6,
 })
 # __sphinx_doc_end__
 # yapf: enable
