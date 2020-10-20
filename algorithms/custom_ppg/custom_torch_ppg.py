@@ -43,6 +43,7 @@ class CustomTorchPolicy(TorchPolicy):
             loss=None,
             action_distribution_class=dist_class,
         )
+
         self.framework = "torch"
         aux_params = set(self.model.aux_vf.parameters())
         value_params = set(self.model.value_fc.parameters())
@@ -97,6 +98,10 @@ class CustomTorchPolicy(TorchPolicy):
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
+    
+    @override(TorchPolicy)
+    def extra_action_out(self, input_dict, state_batches, model, action_dist):
+        return {'values': model._value.tolist()}
         
     @override(TorchPolicy)
     def learn_on_batch(self, samples):
@@ -145,10 +150,7 @@ class CustomTorchPolicy(TorchPolicy):
         ## Value prediction
         next_obs = unroll(samples['new_obs'], ts)[-1]
         last_values, _ = self.model.vf_pi(next_obs, ret_numpy=True, no_grad=True, to_torch=True)
-        values = np.empty((nbatch,), dtype=np.float32)
-        for start in range(0, nbatch, nbatch_train): # Causes OOM up if trying to do all at once
-            end = start + nbatch_train
-            values[start:end], _ = self.model.vf_pi(samples['obs'][start:end], ret_numpy=True, no_grad=True, to_torch=True)
+        values = samples['values']
         
         ## GAE
         mb_values = unroll(values, ts)
@@ -171,7 +173,7 @@ class CustomTorchPolicy(TorchPolicy):
         max_grad_norm = self.config['grad_clip']
         ent_coef, vf_coef = self.ent_coef, self.config['vf_loss_coeff']
         
-        neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
+        logp_actions = samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
         noptepochs = self.config['num_sgd_iter']
         actions = samples['actions']
         returns = roll(mb_returns)
@@ -187,7 +189,7 @@ class CustomTorchPolicy(TorchPolicy):
             for start in range(0, nbatch, nbatch_train):
                 end = start + nbatch_train
                 mbinds = inds[start:end]
-                slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, neglogpacs, normalized_advs))
+                slices = (self.to_tensor(arr[mbinds]) for arr in (obs, returns, actions, values, logp_actions, normalized_advs))
                 optim_count += 1
                 apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 self._batch_train(apply_grad, self.accumulate_train_batches,
@@ -212,18 +214,18 @@ class CustomTorchPolicy(TorchPolicy):
     def _batch_train(self, apply_grad, num_accumulate, 
                      lr, cliprange, vfcliprange, max_grad_norm,
                      ent_coef, vf_coef,
-                     obs, returns, actions, values, neglogpac_old, advs):
+                     obs, returns, actions, values, logp_actions_old, advs):
         
         for g in self.optimizer.param_groups:
             g['lr'] = lr
         vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
         pd = self.make_distr(pi_logits)
-        neglogpac = -pd.log_prob(actions[...,None]).squeeze(1)
+        logp_actions = pd.log_prob(actions[...,None]).squeeze(1)
         entropy = torch.mean(pd.entropy())
 
         vf_loss = .5 * torch.mean(torch.pow((vpred - returns), 2)) * vf_coef
 
-        ratio = torch.exp(neglogpac_old - neglogpac)
+        ratio = torch.exp(logp_actions - logp_actions_old)
         pg_losses1 = -advs * ratio
         pg_losses2 = -advs * torch.clamp(ratio, 1-cliprange, 1+cliprange)
         pg_loss = torch.mean(torch.max(pg_losses1, pg_losses2))

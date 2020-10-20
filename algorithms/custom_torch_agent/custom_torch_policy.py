@@ -85,6 +85,11 @@ class CustomTorchPolicy(TorchPolicy):
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
+    
+    @override(TorchPolicy)
+    def extra_action_out(self, input_dict, state_batches, model, action_dist):
+        return {'values': model._value.tolist()}
+    
         
     @override(TorchPolicy)
     def learn_on_batch(self, samples):
@@ -136,10 +141,7 @@ class CustomTorchPolicy(TorchPolicy):
         ## Value prediction
         next_obs = unroll(samples['new_obs'], ts)[-1]
         last_values, _ = self.model.vf_pi(next_obs, ret_numpy=True, no_grad=True, to_torch=True)
-        values = np.empty((nbatch,), dtype=np.float32)
-        for start in range(0, nbatch, nbatch_train): # Causes OOM up if trying to do all at once
-            end = start + nbatch_train
-            values[start:end], _ = self.model.vf_pi(samples['obs'][start:end], ret_numpy=True, no_grad=True, to_torch=True)
+        values = samples['values']
         
         ## GAE
         mb_values = unroll(values, ts)
