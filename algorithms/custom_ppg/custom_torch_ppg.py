@@ -93,8 +93,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.ent_coef = config['entropy_coeff']
         
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
-#         self.make_distr = dist_build(action_space)
-        self.make_distr = dist_class
+        self.make_distr = dist_build(action_space)
         self.retunes_completed = 0
         
     def to_tensor(self, arr):
@@ -221,7 +220,7 @@ class CustomTorchPolicy(TorchPolicy):
             g['lr'] = lr
         vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
         pd = self.make_distr(pi_logits)
-        logp_actions = pd.logp(actions[...,None]).squeeze(1)
+        logp_actions = pd.log_prob(actions[...,None]).squeeze(1)
         entropy = torch.mean(pd.entropy())
 
         vf_loss = .5 * torch.mean(torch.pow((vpred - returns), 2)) * vf_coef
