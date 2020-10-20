@@ -7,7 +7,6 @@ procgen-ppo:
         timesteps_total: 8000000
         time_total_s: 7200
 
-
     # === Settings for Checkpoints ===
     checkpoint_freq: 25
     checkpoint_at_end: True
@@ -16,7 +15,7 @@ procgen-ppo:
     config:
         # === Settings for the Procgen Environment ===
         env_config:
-            env_name: coinrun
+            env_name: miner
             num_levels: 0
             start_level: 0
             paint_vel_info: False
@@ -46,19 +45,22 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 0
+        skips: 9
         n_pi: 9
         num_retunes: 100
-        retune_epochs: 3
+        retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
-        augment_buffer: False
+        augment_buffer: True
         scale_reward: 1.0
-        reset_returns: True
+        reset_returns: False
+        flattened_buffer: True
+        augment_randint_num: 6 ## Hacky name fix later
+        aux_lr: 5.0e-4
         
         adaptive_gamma: False
-        final_lr: 2.0e-4
-        lr_schedule: 'None'
+        final_lr: 5.0e-5
+        lr_schedule: 'linear'
         final_entropy_coeff: 0.002
         entropy_schedule: False
         
@@ -86,6 +88,7 @@ procgen-ppo:
                 nlatents: 512
                 init_normed: True
                 use_layernorm: False
+                diff_framestack: True
 
         num_workers: 7
         num_envs_per_worker: 16

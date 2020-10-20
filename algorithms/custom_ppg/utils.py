@@ -102,12 +102,19 @@ class AdaptiveDiscountTuner:
     
 def flatten01(arr):
     return arr.reshape(-1, *arr.shape[2:])
+
+def flatten012(arr):
+    return arr.reshape(-1, *arr.shape[3:])
+
     
 class RetuneSelector:
-    def __init__(self, nenvs, ob_space, ac_space, skips = 0, n_pi = 32, num_retunes = 5):
+    def __init__(self, nenvs, ob_space, ac_space, replay_shape, skips = 0, n_pi = 32, num_retunes = 5, flat_buffer=False):
         self.skips = skips
         self.n_pi = n_pi
         self.nenvs = nenvs
+        
+        self.exp_replay = np.empty((*replay_shape, *ob_space.shape), dtype=np.uint8)
+        self.vtarg_replay = np.empty(replay_shape, dtype=np.float32)
         
         self.num_retunes = num_retunes
         self.ac_space = ac_space
@@ -115,8 +122,9 @@ class RetuneSelector:
         
         self.cooldown_counter = 0
         self.replay_index = 0
+        self.flat_buffer = flat_buffer
 
-    def update(self, obs_batch, vtarg_batch, exp_replay, vtarg_replay):
+    def update(self, obs_batch, vtarg_batch):
         if self.num_retunes == 0:
             return False
         
@@ -124,8 +132,8 @@ class RetuneSelector:
             self.cooldown_counter -= 1
             return False
         
-        exp_replay[self.replay_index] = obs_batch
-        vtarg_replay[self.replay_index] = vtarg_batch
+        self.exp_replay[self.replay_index] = obs_batch
+        self.vtarg_replay[self.replay_index] = vtarg_batch
         
         self.replay_index = (self.replay_index + 1) % self.n_pi
         return self.replay_index == 0
@@ -136,15 +144,29 @@ class RetuneSelector:
         self.replay_index = 0
         
         
-    def make_minibatches_with_rollouts(self, exp_replay, vtarg_replay, presleep_pi, num_rollouts=4):
-            env_segs = list(itertools.product(range(self.n_pi), range(self.nenvs)))
-            np.random.shuffle(env_segs)
-            env_segs = np.array(env_segs)
-            for idx in range(0, len(env_segs), num_rollouts):
-                esinds = env_segs[idx:idx+num_rollouts]
-                mbatch = [flatten01(arr[esinds[:,0], : , esinds[:,1]]) 
-                          for arr in (exp_replay, vtarg_replay, presleep_pi)]
-                yield mbatch
+    def make_minibatches(self, presleep_pi, num_rollouts=4):
+            if not self.flat_buffer:
+                env_segs = list(itertools.product(range(self.n_pi), range(self.nenvs)))
+                np.random.shuffle(env_segs)
+                env_segs = np.array(env_segs)
+                for idx in range(0, len(env_segs), num_rollouts):
+                    esinds = env_segs[idx:idx+num_rollouts]
+                    mbatch = [flatten01(arr[esinds[:,0], : , esinds[:,1]]) 
+                              for arr in (self.exp_replay, self.vtarg_replay, presleep_pi)]
+                    yield mbatch
+            else:
+                nsteps = self.vtarg_replay.shape[1]
+                buffsize = self.n_pi * nsteps * self.nenvs
+                inds = np.arange(buffsize)
+                np.random.shuffle(inds)
+                batchsize = num_rollouts * nsteps
+                for start in range(0, buffsize, batchsize):
+                    end = start+batchsize
+                    mbinds = inds[start:end]
+                    mbatch = [flatten012(arr)[mbinds] 
+                              for arr in (self.exp_replay, self.vtarg_replay, presleep_pi)]
+                    
+                    yield mbatch
    
         
 class RewardNormalizer(object):
