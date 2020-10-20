@@ -91,6 +91,7 @@ DEFAULT_CONFIG = with_common_config({
     "reset_returns": True,
     "flattened_buffer": False,
     "augment_randint_num": 6,
+    "aux_lr": 5e-4,
 })
 # __sphinx_doc_end__
 # yapf: enable
