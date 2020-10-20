@@ -132,8 +132,8 @@ class RetuneSelector:
             self.cooldown_counter -= 1
             return False
         
-        self.exp_replay[self.replay_index] = obs_batch.copy()
-        self.vtarg_replay[self.replay_index] = vtarg_batch.copy()
+        self.exp_replay[self.replay_index] = obs_batch
+        self.vtarg_replay[self.replay_index] = vtarg_batch
         
         self.replay_index = (self.replay_index + 1) % self.n_pi
         return self.replay_index == 0
