@@ -72,11 +72,11 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         nn.Module.__init__(self)
 
         self.device = device
-        depths = model_config['custom_options'].get('depths') or [16, 32, 32]
-        nlatents = model_config['custom_options'].get('nlatents') or 256
-        init_normed = model_config['custom_options'].get('init_normed') or False
-        self.use_layernorm = model_config['custom_options'].get('use_layernorm') or False
-        self.diff_framestack = model_config['custom_options'].get('diff_framestack') or False
+        depths = model_config['custom_options'].get('depths')
+        nlatents = model_config['custom_options'].get('nlatents')
+        init_normed = model_config['custom_options'].get('init_normed')
+        self.use_layernorm = model_config['custom_options'].get('use_layernorm')
+        self.diff_framestack = model_config['custom_options'].get('diff_framestack')
         
         h, w, c = obs_space.shape
         if self.diff_framestack:

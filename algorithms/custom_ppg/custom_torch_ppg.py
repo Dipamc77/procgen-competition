@@ -197,8 +197,6 @@ class CustomTorchPolicy(TorchPolicy):
         should_retune = self.retune_selector.update(unroll(obs, ts), mb_returns)
         if should_retune:
             self.aux_train()
-            self.update_batch_time()
-            return {}
         
         self.update_gamma(samples)
         self.update_lr()

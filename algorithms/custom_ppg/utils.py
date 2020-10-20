@@ -113,7 +113,7 @@ class RetuneSelector:
         self.n_pi = n_pi
         self.nenvs = nenvs
         
-        self.exp_replay = np.zeros((*replay_shape, *ob_space.shape), dtype=np.uint8)
+        self.exp_replay = np.empty((*replay_shape, *ob_space.shape), dtype=np.uint8)
         self.vtarg_replay = np.empty(replay_shape, dtype=np.float32)
         
         self.num_retunes = num_retunes
@@ -153,6 +153,7 @@ class RetuneSelector:
                     esinds = env_segs[idx:idx+num_rollouts]
                     mbatch = [flatten01(arr[esinds[:,0], : , esinds[:,1]]) 
                               for arr in (self.exp_replay, self.vtarg_replay, presleep_pi)]
+                    yield mbatch
             else:
                 nsteps = self.vtarg_replay.shape[1]
                 buffsize = self.n_pi * nsteps * self.nenvs
@@ -165,7 +166,7 @@ class RetuneSelector:
                     mbatch = [flatten012(arr)[mbinds] 
                               for arr in (self.exp_replay, self.vtarg_replay, presleep_pi)]
                     
-            yield mbatch
+                    yield mbatch
    
         
 class RewardNormalizer(object):
