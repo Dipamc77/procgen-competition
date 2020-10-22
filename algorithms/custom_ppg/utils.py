@@ -120,7 +120,7 @@ class RetuneSelector:
         self.ac_space = ac_space
         self.ob_space = ob_space
         
-        self.cooldown_counter = 0
+        self.cooldown_counter = skips
         self.replay_index = 0
         self.flat_buffer = flat_buffer
 
