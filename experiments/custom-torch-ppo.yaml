@@ -46,9 +46,9 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        retune_skips: 350000
-        retune_replay_size: 200000
-        num_retunes: 13
+        retune_skips: 400000
+        retune_replay_size: 250000
+        num_retunes: 11
         retune_epochs: 3
         standardize_rewards: True
         scale_reward: 1.0
@@ -58,7 +58,7 @@ procgen-ppo:
         final_lr: 5.0e-5
         lr_schedule: 'linear'
         final_entropy_coeff: 0.002
-        entropy_schedule: False
+        entropy_schedule: True
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
         max_minibatch_size: 2048

@@ -133,6 +133,7 @@ class CustomCallbacks(DefaultCallbacks):
         trainer_policy = trainer.get_policy()
         result['current_lr'] = trainer_policy.lr
         result['current_gamma'] = trainer_policy.gamma
+        result['entropy_coef'] = trainer_policy.ent_coef
         result['best_reward'] = trainer_policy.best_reward
         result['best_rew_tsteps'] = trainer_policy.best_rew_tsteps
         result['rnorm_var'] = trainer_policy.rewnorm.ret_rms.var
