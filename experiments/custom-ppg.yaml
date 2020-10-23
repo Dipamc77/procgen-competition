@@ -45,8 +45,8 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 0
-        n_pi: 18
+        skips: 9
+        n_pi: 9
         num_retunes: 100
         retune_epochs: 6
         standardize_rewards: True
@@ -57,6 +57,8 @@ procgen-ppo:
         flattened_buffer: True
         augment_randint_num: 6 ## Hacky name fix later
         aux_lr: 5.0e-4
+        value_lr: 1.0e-3
+        same_lr_everywhere: True
         
         adaptive_gamma: False
         final_lr: 5.0e-5
@@ -82,10 +84,10 @@ procgen-ppo:
         model:
             custom_model: impala_torch_ppg
             custom_options: 
-                depths: [16, 32, 32]
-                nlatents: 256
-#                 depths: [32, 64, 64]
-#                 nlatents: 512
+#                 depths: [16, 32, 32]
+#                 nlatents: 256
+                depths: [32, 64, 64]
+                nlatents: 512
                 init_normed: True
                 use_layernorm: False
                 diff_framestack: True

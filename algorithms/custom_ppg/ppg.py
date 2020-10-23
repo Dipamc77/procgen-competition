@@ -92,6 +92,8 @@ DEFAULT_CONFIG = with_common_config({
     "flattened_buffer": False,
     "augment_randint_num": 6,
     "aux_lr": 5e-4,
+    "value_lr": 1e-3,
+    "same_lr_everywhere": False,
 })
 # __sphinx_doc_end__
 # yapf: enable
