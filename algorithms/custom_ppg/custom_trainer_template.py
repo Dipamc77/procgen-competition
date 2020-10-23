@@ -206,9 +206,7 @@ def build_trainer(name,
             Trainer.__setstate__(self, state)
             policy = Trainer.get_policy(self)
             self.state = state["trainer_state"].copy()
-            policy.set_optimizer_state(state["optimizer_state"])
-            policy.set_aux_optimizer_state(state["aux_optimizer_state"])
-            policy.set_value_optimizer_state(state["value_optimizer_state"])
+            policy.set_optimizer_state(state["optimizer_state"], state["aux_optimizer_state"], state["value_optimizer_state"])
             policy.set_custom_state_vars(state["custom_state_vars"])
                             
             if self.train_exec_impl:
