@@ -38,7 +38,7 @@ procgen-ppo:
         entropy_coeff: 0.01
         clip_param: 0.2
         vf_clip_param: 0.2
-        grad_clip: 0.1
+        grad_clip: 0.5
         observation_filter: NoFilter
         vf_share_layers: True
         horizon: null
@@ -46,8 +46,8 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        retune_skips: 400000
-        retune_replay_size: 250000
+        retune_skips: 450000
+        retune_replay_size: 200000
         num_retunes: 11
         retune_epochs: 3
         standardize_rewards: True
@@ -80,9 +80,9 @@ procgen-ppo:
             custom_options: 
                 depths: [32, 64, 64]
                 nlatents: 512
-                init_normed: False
                 use_layernorm: True
                 diff_framestack: True
+                d2rl: True
 
         num_workers: 7
         num_envs_per_worker: 16

@@ -42,7 +42,6 @@ class CustomTorchPolicy(TorchPolicy):
             loss=None,
             action_distribution_class=dist_class,
         )
-
         self.framework = "torch"
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         self.max_reward = self.config['env_config']['return_max']
