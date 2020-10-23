@@ -6,21 +6,39 @@ import numpy as np
 
 torch, nn = try_import_torch()
 
+class D2RL(nn.Module):
+    def __init__(self, num_inputs, num_outputs, final_layer_gain, hidden_dim):
+        super().__init__()
+        
+        in_dim = num_inputs + hidden_dim
+        self.inp_layer = nn.Linear(num_inputs, hidden_dim)
+        
+        self.layer_1 = nn.Linear(in_dim, hidden_dim)
+        self.layer_2 = nn.Linear(in_dim, hidden_dim)
+        self.layer_3 = nn.Linear(in_dim, hidden_dim)
+            
+        self.out_layer = nn.Linear(hidden_dim, num_outputs)
+        nn.init.orthogonal_(self.out_layer.weight, gain=final_layer_gain)
+        nn.init.zeros_(self.out_layer.bias)
+        
+    def forward(self, latent):
+        x = self.inp_layer(latent)
+        x = nn.functional.relu(x)
+        
+        x = torch.cat([x, latent], dim=1)
+        x = nn.functional.relu(self.layer_1(x))
+        x = torch.cat([x, latent], dim=1)
+        x = nn.functional.relu(self.layer_2(x))
+        x = torch.cat([x, latent], dim=1)
+        x = nn.functional.relu(self.layer_3(x))
+        
+        return self.out_layer(x)
 
 class ResidualBlock(nn.Module):
-    def __init__(self, channels, init_normed=False):
+    def __init__(self, channels):
         super().__init__()
         self.conv0 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
         self.conv1 = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=3, padding=1)
-        if init_normed:
-            scale = (1/3**0.5 * 1/2**0.5)**0.5 
-            # Understand logic for this scale -> 
-            # https://github.com/openai/phasic-policy-gradient/blob/master/phasic_policy_gradient/impala_cnn.py
-            self.conv0.weight.data *= scale / self.conv0.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
-            nn.init.zeros_(self.conv0.bias)
-            self.conv1.weight.data *= scale / self.conv1.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
-            nn.init.zeros_(self.conv1.bias)
-
     
     def forward(self, x):
         inputs = x
@@ -32,16 +50,13 @@ class ResidualBlock(nn.Module):
 
 
 class ConvSequence(nn.Module):
-    def __init__(self, input_shape, out_channels, init_normed=False):
+    def __init__(self, input_shape, out_channels):
         super().__init__()
         self._input_shape = input_shape
         self._out_channels = out_channels
         self.conv = nn.Conv2d(in_channels=self._input_shape[0], out_channels=self._out_channels, kernel_size=3, padding=1)
-        self.res_block0 = ResidualBlock(self._out_channels, init_normed)
-        self.res_block1 = ResidualBlock(self._out_channels, init_normed)
-        if init_normed:
-            self.conv.weight.data *= 1. / self.conv.weight.norm(dim=(1, 2, 3), p=2, keepdim=True)
-            nn.init.zeros_(self.conv.bias)
+        self.res_block0 = ResidualBlock(self._out_channels)
+        self.res_block1 = ResidualBlock(self._out_channels)
 
     def forward(self, x, pool=True):
         x = self.conv(x)
@@ -74,8 +89,8 @@ class ImpalaCNN(TorchModelV2, nn.Module):
         self.device = device
         depths = model_config['custom_options'].get('depths') or [16, 32, 32]
         nlatents = model_config['custom_options'].get('nlatents') or 256
-        init_normed = model_config['custom_options'].get('init_normed') or False
-        self.use_layernorm = model_config['custom_options'].get('use_layernorm') or True
+        d2rl = model_config['custom_options'].get('d2rl') or False
+        self.use_layernorm = model_config['custom_options'].get('use_layernorm') or False
         self.diff_framestack = model_config['custom_options'].get('diff_framestack') or False
 
         
@@ -87,24 +102,24 @@ class ImpalaCNN(TorchModelV2, nn.Module):
 
         conv_seqs = []
         for out_channels in depths:
-            conv_seq = ConvSequence(shape, out_channels, init_normed)
+            conv_seq = ConvSequence(shape, out_channels)
             shape = conv_seq.get_output_shape()
             conv_seqs.append(conv_seq)
         self.conv_seqs = nn.ModuleList(conv_seqs)
         self.hidden_fc = nn.Linear(in_features=shape[0] * shape[1] * shape[2], out_features=nlatents)
-        if init_normed:
-            self.hidden_fc.weight.data *= 1.4 / self.hidden_fc.weight.norm(dim=1, p=2, keepdim=True)
-            nn.init.zeros_(self.hidden_fc.bias)
-        self.pi_fc = nn.Linear(in_features=nlatents, out_features=num_outputs)
-        self.value_fc = nn.Linear(in_features=nlatents, out_features=1)
-        if init_normed:
-            self.pi_fc.weight.data *= 0.1 / self.pi_fc.weight.norm(dim=1, p=2, keepdim=True)
-            self.value_fc.weight.data *= 0.1 / self.value_fc.weight.norm(dim=1, p=2, keepdim=True)
-        else:
+        if not d2rl:
+            self.pi_fc = nn.Linear(in_features=nlatents, out_features=num_outputs)
+            self.value_fc = nn.Linear(in_features=nlatents, out_features=1)
             nn.init.orthogonal_(self.pi_fc.weight, gain=0.01)
             nn.init.orthogonal_(self.value_fc.weight, gain=1)
-        nn.init.zeros_(self.pi_fc.bias)
-        nn.init.zeros_(self.value_fc.bias)
+            nn.init.zeros_(self.pi_fc.bias)
+            nn.init.zeros_(self.value_fc.bias)
+        else:
+            self.pi_fc = D2RL(num_inputs=nlatents, num_outputs=num_outputs, 
+                              final_layer_gain=0.01, hidden_dim=256)
+            self.value_fc = D2RL(num_inputs=nlatents, num_outputs=1, 
+                                 final_layer_gain=1, hidden_dim=256)
+
         if self.use_layernorm:
             self.layernorm = nn.LayerNorm(nlatents)
 
