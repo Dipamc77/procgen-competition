@@ -55,10 +55,10 @@ procgen-ppo:
         scale_reward: 1.0
         reset_returns: False
         flattened_buffer: True
-        augment_randint_num: 6 ## Hacky name fix later
+        augment_randint_num: 3 ## Hacky name fix later
         aux_lr: 5.0e-4
         value_lr: 1.0e-3
-        same_lr_everywhere: True
+        same_lr_everywhere: False
         
         adaptive_gamma: False
         final_lr: 5.0e-5
