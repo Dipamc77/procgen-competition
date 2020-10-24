@@ -45,17 +45,17 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 9
-        n_pi: 9
+        skips: 0
+        n_pi: 18
         num_retunes: 100
-        retune_epochs: 6
+        retune_epochs: 3
         standardize_rewards: True
         aux_mbsize: 4
         augment_buffer: True
         scale_reward: 1.0
         reset_returns: False
         flattened_buffer: True
-        augment_randint_num: 3 ## Hacky name fix later
+        augment_randint_num: 6 ## Hacky name fix later
         aux_lr: 5.0e-4
         value_lr: 1.0e-3
         same_lr_everywhere: False
