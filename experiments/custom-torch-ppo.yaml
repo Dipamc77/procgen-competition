@@ -62,7 +62,7 @@ procgen-ppo:
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
         max_minibatch_size: 2048
-        updates_per_batch: 3
+        updates_per_batch: 8
 
         normalize_actions: False
         clip_rewards: null
@@ -81,11 +81,11 @@ procgen-ppo:
                 depths: [32, 64, 64]
                 nlatents: 512
                 use_layernorm: True
-                diff_framestack: False
+                diff_framestack: True
                 d2rl: True
 
         num_workers: 7
-        num_envs_per_worker: 9
+        num_envs_per_worker: 16
 
         rollout_fragment_length: 256
 
