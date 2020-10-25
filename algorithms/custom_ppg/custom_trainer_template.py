@@ -196,6 +196,7 @@ def build_trainer(name,
             state["optimizer_state"] = {k: v for k, v in policy.optimizer.state_dict().items()}
             state["aux_optimizer_state"] = {k: v for k, v in policy.aux_optimizer.state_dict().items()}
             state["value_optimizer_state"] = {k: v for k, v in policy.value_optimizer.state_dict().items()}
+            state["amp_scaler_state"] = {k: v for k, v in policy.amp_scaler.state_dict().items()}
             
             if self.train_exec_impl:
                 state["train_exec_impl"] = (
@@ -206,7 +207,8 @@ def build_trainer(name,
             Trainer.__setstate__(self, state)
             policy = Trainer.get_policy(self)
             self.state = state["trainer_state"].copy()
-            policy.set_optimizer_state(state["optimizer_state"], state["aux_optimizer_state"], state["value_optimizer_state"])
+            policy.set_optimizer_state(state["optimizer_state"], state["aux_optimizer_state"], 
+                                       state["value_optimizer_state"], state["amp_scaler_state"])
             policy.set_custom_state_vars(state["custom_state_vars"])
                             
             if self.train_exec_impl:

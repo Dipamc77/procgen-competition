@@ -10,6 +10,7 @@ import time
 
 torch, nn = try_import_torch()
 import torch.distributions as td
+from torch.cuda.amp import autocast, GradScaler
 
 class CustomTorchPolicy(TorchPolicy):
     """Example of a random policy
@@ -95,6 +96,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
         self.make_distr = dist_build(action_space)
         self.retunes_completed = 0
+        self.amp_scaler = GradScaler()
         
         self.update_lr()
         
@@ -199,7 +201,10 @@ class CustomTorchPolicy(TorchPolicy):
         ## Distill with aux head
         should_retune = self.retune_selector.update(unroll(obs, ts), mb_returns)
         if should_retune:
+            import time
+            tnow = time.perf_counter()
             self.aux_train()
+            print("Aux Train %fs" % (time.perf_counter()-tnow))
         
         self.update_gamma(samples)
         self.update_lr()
@@ -273,25 +278,41 @@ class CustomTorchPolicy(TorchPolicy):
         else:
             obs_in = self.to_tensor(obs)
         
+        if not self.config['aux_phase_mixed_precision']:
+            loss, vf_loss = self._aux_calc_loss(obs_in, target_vf, target_pi)
+            loss.backward()
+            vf_loss.backward()
+            self.aux_optimizer.step()
+            self.value_optimizer.step()
+            
+        else:
+            with autocast():
+                loss, vf_loss = self._aux_calc_loss(obs_in, target_vf, target_pi)
+            
+            self.amp_scaler.scale(loss).backward(retain_graph=True)
+            self.amp_scaler.scale(vf_loss).backward()
+
+            self.amp_scaler.step(self.aux_optimizer)
+            self.amp_scaler.step(self.value_optimizer)
+
+            self.amp_scaler.update()
+            
+        self.aux_optimizer.zero_grad()
+        self.value_optimizer.zero_grad()
+            
+    def _aux_calc_loss(self, obs_in, target_vf, target_pi):
         vpred, pi_logits = self.model.vf_pi(obs_in, ret_numpy=False, no_grad=False, to_torch=False)
         aux_vpred = self.model.aux_value_function()
         aux_loss = .5 * torch.mean(torch.pow(aux_vpred - target_vf, 2))
-        
+
         target_pd = self.make_distr(target_pi)
         pd = self.make_distr(pi_logits)
         pi_loss = td.kl_divergence(target_pd, pd).mean()
-        
-        loss = pi_loss + aux_loss
-        
-        loss.backward()
-        self.aux_optimizer.step()
-        self.aux_optimizer.zero_grad()
-        
-        vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
 
-        vf_loss.backward()
-        self.value_optimizer.step()
-        self.value_optimizer.zero_grad()
+        loss = pi_loss + aux_loss
+        vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
+        
+        return loss, vf_loss
         
     def best_reward_model_select(self, samples):
         self.timesteps_total += len(samples['dones'])
@@ -389,13 +410,12 @@ class CustomTorchPolicy(TorchPolicy):
             for k, v in self.model.state_dict().items()
         }
         return weights
-        
     
     @override(TorchPolicy)
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
         
-    def set_optimizer_state(self, optimizer_state, aux_optimizer_state, value_optimizer_state):
+    def set_optimizer_state(self, optimizer_state, aux_optimizer_state, value_optimizer_state, amp_scaler_state):
         optimizer_state = convert_to_torch_tensor(optimizer_state, device=self.device)
         self.optimizer.load_state_dict(optimizer_state)
         
@@ -404,6 +424,9 @@ class CustomTorchPolicy(TorchPolicy):
         
         value_optimizer_state = convert_to_torch_tensor(value_optimizer_state, device=self.device)
         self.value_optimizer.load_state_dict(value_optimizer_state)
+        
+        amp_scaler_state = convert_to_torch_tensor(amp_scaler_state, device=self.device)
+        self.amp_scaler.load_state_dict(amp_scaler_state)
         
     def set_model_weights(self, model_weights):
         model_weights = convert_to_torch_tensor(model_weights, device=self.device)

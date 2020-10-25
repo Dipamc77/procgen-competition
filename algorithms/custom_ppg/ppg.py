@@ -94,6 +94,7 @@ DEFAULT_CONFIG = with_common_config({
     "aux_lr": 5e-4,
     "value_lr": 1e-3,
     "same_lr_everywhere": False,
+    "aux_phase_mixed_precision": False,
 })
 # __sphinx_doc_end__
 # yapf: enable
