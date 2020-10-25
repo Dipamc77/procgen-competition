@@ -45,9 +45,9 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 0
+        skips: 2
         n_pi: 16
-        num_retunes: 29
+        num_retunes: 26
         retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
