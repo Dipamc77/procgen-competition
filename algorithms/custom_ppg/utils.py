@@ -178,7 +178,7 @@ class RewardNormalizer(object):
         self.cliprew = cliprew
         self.ret = 0. # size updates after first pass
         
-    def normalize(self, rews, news, resetrew=True):
+    def normalize(self, rews, news, resetrew):
         self.ret = self.ret * self.gamma + rews
         self.ret_rms.update(self.ret)
         rews = np.clip(rews / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)

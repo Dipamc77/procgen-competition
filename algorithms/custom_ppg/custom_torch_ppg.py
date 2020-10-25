@@ -88,7 +88,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.save_success = 0
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
-        self.max_time = 100000000
+        self.max_time = self.config['max_time']
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
@@ -137,7 +137,7 @@ class CustomTorchPolicy(TorchPolicy):
             mb_rewards =  np.zeros_like(mb_origrewards)
             mb_rewards[0] = self.rewnorm.normalize(mb_origrewards[0], self.last_dones, self.config["reset_returns"])
             for ii in range(1, nsteps):
-                mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii], mb_dones[ii-1])
+                mb_rewards[ii] = self.rewnorm.normalize(mb_origrewards[ii], mb_dones[ii-1], self.config["reset_returns"])
             self.last_dones = mb_dones[-1]
         else:
             mb_rewards = unroll(samples['rewards'], ts)

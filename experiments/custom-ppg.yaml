@@ -47,7 +47,7 @@ procgen-ppo:
         # Custom switches
         skips: 0
         n_pi: 16
-        num_retunes: 100
+        num_retunes: 29
         retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
@@ -61,6 +61,7 @@ procgen-ppo:
         same_lr_everywhere: False
         aux_phase_mixed_precision: True
         single_optimizer: True
+        max_time: 7200
         
         adaptive_gamma: False
         final_lr: 5.0e-5
