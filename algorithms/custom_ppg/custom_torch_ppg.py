@@ -22,6 +22,8 @@ class CustomTorchPolicy(TorchPolicy):
 
     def __init__(self, observation_space, action_space, config):
         self.config = config
+        self.acion_space = action_space
+        self.observation_space = observation_space
 
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         dist_class, logit_dim = ModelCatalog.get_action_dist(
@@ -44,8 +46,12 @@ class CustomTorchPolicy(TorchPolicy):
             loss=None,
             action_distribution_class=dist_class,
         )
-
+        
         self.framework = "torch"
+
+        
+    def init_training(self):
+        """ Init once only for the policy - Surely there should be a bette way to do this """
         aux_params = set(self.model.aux_vf.parameters())
         value_params = set(self.model.value_fc.parameters())
         network_params = set(self.model.parameters())
@@ -80,7 +86,7 @@ class CustomTorchPolicy(TorchPolicy):
             print("WARNING: MEMORY LIMITED BATCHING NOT SET PROPERLY")
             print("#################################################")
         replay_shape = (n_pi, nsteps, nenvs)
-        self.retune_selector = RetuneSelector(nenvs, observation_space, action_space, replay_shape,
+        self.retune_selector = RetuneSelector(nenvs, self.observation_space, self.action_space, replay_shape,
                                               skips = self.config['skips'], 
                                               n_pi = n_pi,
                                               num_retunes = self.config['num_retunes'],
@@ -93,11 +99,11 @@ class CustomTorchPolicy(TorchPolicy):
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
         
-        self.lr = config['lr']
-        self.ent_coef = config['entropy_coeff']
+        self.lr = self.config['lr']
+        self.ent_coef = self.config['entropy_coeff']
         
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
-        self.make_distr = dist_build(action_space)
+        self.make_distr = dist_build(self.action_space)
         self.retunes_completed = 0
         self.amp_scaler = GradScaler()
         

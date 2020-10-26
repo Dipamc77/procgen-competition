@@ -139,6 +139,9 @@ def build_trainer(name,
                                                       **optimizer_config)
             if after_init:
                 after_init(self)
+                
+            policy = Trainer.get_policy(self)
+            policy.init_training()
 
         @override(Trainer)
         def _train(self):
@@ -192,11 +195,14 @@ def build_trainer(name,
             state = Trainer.__getstate__(self)
             state["trainer_state"] = self.state.copy()
             policy = Trainer.get_policy(self)
-            state["custom_state_vars"] = policy.get_custom_state_vars()
-            state["optimizer_state"] = {k: v for k, v in policy.optimizer.state_dict().items()}
-            state["aux_optimizer_state"] = {k: v for k, v in policy.aux_optimizer.state_dict().items()}
-            state["value_optimizer_state"] = {k: v for k, v in policy.value_optimizer.state_dict().items()}
-            state["amp_scaler_state"] = {k: v for k, v in policy.amp_scaler.state_dict().items()}
+            try:
+                state["custom_state_vars"] = policy.get_custom_state_vars()
+                state["optimizer_state"] = {k: v for k, v in policy.optimizer.state_dict().items()}
+                state["aux_optimizer_state"] = {k: v for k, v in policy.aux_optimizer.state_dict().items()}
+                state["value_optimizer_state"] = {k: v for k, v in policy.value_optimizer.state_dict().items()}
+                state["amp_scaler_state"] = {k: v for k, v in policy.amp_scaler.state_dict().items()}
+            except:
+                print("################# WARNING: SAVING STATE VARS AND OPTIMIZER FAILED ################")
             
             if self.train_exec_impl:
                 state["train_exec_impl"] = (
@@ -207,9 +213,12 @@ def build_trainer(name,
             Trainer.__setstate__(self, state)
             policy = Trainer.get_policy(self)
             self.state = state["trainer_state"].copy()
-            policy.set_optimizer_state(state["optimizer_state"], state["aux_optimizer_state"], 
-                                       state["value_optimizer_state"], state["amp_scaler_state"])
-            policy.set_custom_state_vars(state["custom_state_vars"])
+            try:
+                policy.set_optimizer_state(state["optimizer_state"], state["aux_optimizer_state"], 
+                                           state["value_optimizer_state"], state["amp_scaler_state"])
+                policy.set_custom_state_vars(state["custom_state_vars"])
+            except:
+                print("################# WARNING: LOADING STATE VARS AND OPTIMIZER FAILED ################")
                             
             if self.train_exec_impl:
                 self.train_exec_impl.shared_metrics.get().restore(

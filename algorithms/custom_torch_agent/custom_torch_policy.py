@@ -21,6 +21,8 @@ class CustomTorchPolicy(TorchPolicy):
 
     def __init__(self, observation_space, action_space, config):
         self.config = config
+        self.acion_space = action_space
+        self.observation_space = observation_space
 
         self.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         dist_class, logit_dim = ModelCatalog.get_action_dist(
@@ -43,7 +45,11 @@ class CustomTorchPolicy(TorchPolicy):
             loss=None,
             action_distribution_class=dist_class,
         )
+        
         self.framework = "torch"
+
+    
+    def init_training(self):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         self.max_reward = self.config['env_config']['return_max']
         self.rewnorm = RewardNormalizer(cliprew=self.max_reward) ## TODO: Might need to go to custom state
@@ -64,11 +70,11 @@ class CustomTorchPolicy(TorchPolicy):
             print("#################################################")
             print("WARNING: MEMORY LIMITED BATCHING NOT SET PROPERLY")
             print("#################################################")
-        self.retune_selector = RetuneSelector(self.nbatch, observation_space, action_space, 
+        self.retune_selector = RetuneSelector(self.nbatch, self.observation_space, self.action_space, 
                                               skips = self.config['retune_skips'], 
                                               replay_size = self.config['retune_replay_size'], 
                                               num_retunes = self.config['num_retunes'])
-        self.exp_replay = np.zeros((self.retune_selector.replay_size, *observation_space.shape), dtype=np.uint8)
+        self.exp_replay = np.empty((self.retune_selector.replay_size, *self.observation_space.shape), dtype=np.uint8)
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
         self.max_time = 10000000000000 # ignore timekeeping because spot instances are messing it up
@@ -76,8 +82,8 @@ class CustomTorchPolicy(TorchPolicy):
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
         
-        self.lr = config['lr']
-        self.ent_coef = config['entropy_coeff']
+        self.lr = self.config['lr']
+        self.ent_coef = self.config['entropy_coeff']
         
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
         self.save_success = 0
@@ -270,7 +276,6 @@ class CustomTorchPolicy(TorchPolicy):
                           self.to_tensor(replay_pi[mbinds])]
                 self.tune_policy(apply_grad, *slices, 0.5)
         
-        self.exp_replay.fill(0)
         self.retunes_completed += 1
         self.retune_selector.retune_done()
  
