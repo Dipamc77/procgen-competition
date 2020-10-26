@@ -46,9 +46,9 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        retune_skips: 450000
+        retune_skips: 100000
         retune_replay_size: 200000
-        num_retunes: 11
+        num_retunes: 23
         retune_epochs: 3
         standardize_rewards: True
         scale_reward: 1.0
@@ -61,7 +61,7 @@ procgen-ppo:
         entropy_schedule: False
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
-        max_minibatch_size: 2048
+        max_minibatch_size: 1500
         updates_per_batch: 8
 
         normalize_actions: False
@@ -82,7 +82,7 @@ procgen-ppo:
                 nlatents: 512
                 use_layernorm: True
                 diff_framestack: True
-                d2rl: True
+                d2rl: False
 
         num_workers: 7
         num_envs_per_worker: 16

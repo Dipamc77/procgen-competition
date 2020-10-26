@@ -45,9 +45,9 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 0
+        skips: 2
         n_pi: 16
-        num_retunes: 16
+        num_retunes: 14
         retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
@@ -70,7 +70,7 @@ procgen-ppo:
         entropy_schedule: False
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
-        max_minibatch_size: 1800
+        max_minibatch_size: 1500
         updates_per_batch: 8
 
         normalize_actions: False
