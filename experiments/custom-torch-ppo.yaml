@@ -53,6 +53,7 @@ procgen-ppo:
         standardize_rewards: True
         scale_reward: 1.0
         return_reset: False
+        aux_phase_mixed_precision: True
         
         adaptive_gamma: False
         final_lr: 5.0e-5

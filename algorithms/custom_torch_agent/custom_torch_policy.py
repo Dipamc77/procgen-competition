@@ -9,6 +9,7 @@ from .utils import *
 import time
 
 torch, nn = try_import_torch()
+from torch.cuda.amp import autocast, GradScaler
 
 class CustomTorchPolicy(TorchPolicy):
     """Example of a random policy
@@ -81,6 +82,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.last_dones = np.zeros((nw * self.config['num_envs_per_worker'],))
         self.save_success = 0
         self.retunes_completed = 0
+        self.amp_scaler = GradScaler()
         
     def to_tensor(self, arr):
         return torch.from_numpy(arr).to(self.device)
@@ -282,6 +284,23 @@ class CustomTorchPolicy(TorchPolicy):
         with torch.no_grad():
             tpi_log_softmax = nn.functional.log_softmax(target_pi, dim=1)
             tpi_softmax = torch.exp(tpi_log_softmax)
+        if not self.config['aux_phase_mixed_precision']:
+            loss = self._retune_calc_loss(obs_aug, target_vf, tpi_softmax, tpi_log_softmax, retune_vf_loss_coeff)
+            loss.backward()
+            if apply_grad:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+        else:
+            with autocast():
+                 loss = self._retune_calc_loss(obs_aug, target_vf, tpi_softmax, tpi_log_softmax, retune_vf_loss_coeff)
+            self.amp_scaler.scale(loss).backward()
+            
+            if apply_grad:
+                self.amp_scaler.step(self.optimizer)
+                self.amp_scaler.update()
+                self.optimizer.zero_grad()
+            
+    def _retune_calc_loss(self, obs_aug, target_vf, tpi_softmax, tpi_log_softmax, retune_vf_loss_coeff):
         vpred, pi_logits = self.model.vf_pi(obs_aug, ret_numpy=False, no_grad=False, to_torch=False)
         pi_log_softmax =  nn.functional.log_softmax(pi_logits, dim=1)
         pi_loss = torch.mean(torch.sum(tpi_softmax * (tpi_log_softmax - pi_log_softmax) , dim=1)) # kl_div torch 1.3.1 has numerical issues
@@ -289,11 +308,7 @@ class CustomTorchPolicy(TorchPolicy):
         
         loss = retune_vf_loss_coeff * vf_loss + pi_loss
         loss = loss / self.accumulate_train_batches
-        
-        loss.backward()
-        if apply_grad:
-            self.optimizer.step()
-            self.optimizer.zero_grad()
+        return loss
         
     def best_reward_model_select(self, samples):
         self.timesteps_total += self.nbatch
@@ -384,23 +399,19 @@ class CustomTorchPolicy(TorchPolicy):
             k: v.cpu().detach().numpy()
             for k, v in self.model.state_dict().items()
         }
-#         weights["optimizer_state"] = {
-#             k: v
-#             for k, v in self.optimizer.state_dict().items()
-#         }
-#         weights["custom_state_vars"] = self.get_custom_state_vars()
         return weights
         
     
     @override(TorchPolicy)
     def set_weights(self, weights):
         self.set_model_weights(weights["current_weights"])
-#         self.set_optimizer_state(weights["optimizer_state"])
-#         self.set_custom_state_vars(weights["custom_state_vars"])
         
-    def set_optimizer_state(self, optimizer_state):
+    def set_optimizer_state(self, optimizer_state, amp_scaler_state):
         optimizer_state = convert_to_torch_tensor(optimizer_state, device=self.device)
         self.optimizer.load_state_dict(optimizer_state)
+        
+        amp_scaler_state = convert_to_torch_tensor(amp_scaler_state, device=self.device)
+        self.amp_scaler.load_state_dict(amp_scaler_state)
         
     def set_model_weights(self, model_weights):
         model_weights = convert_to_torch_tensor(model_weights, device=self.device)
