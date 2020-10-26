@@ -89,6 +89,7 @@ DEFAULT_CONFIG = with_common_config({
     "scale_reward": 1.0,
     "return_reset": True,
     "aux_phase_mixed_precision": False,
+    "max_time": 100000000,
 })
 # __sphinx_doc_end__
 # yapf: enable

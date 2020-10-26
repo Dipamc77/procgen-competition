@@ -77,7 +77,7 @@ class CustomTorchPolicy(TorchPolicy):
         self.exp_replay = np.empty((self.retune_selector.replay_size, *self.observation_space.shape), dtype=np.uint8)
         self.target_timesteps = 8_000_000
         self.buffer_time = 20 # TODO: Could try to do a median or mean time step check instead
-        self.max_time = 10000000000000 # ignore timekeeping because spot instances are messing it up
+        self.max_time = self.config['max_time']
         self.maxrewep_lenbuf = deque(maxlen=100)
         self.gamma = self.config['gamma']
         self.adaptive_discount_tuner = AdaptiveDiscountTuner(self.gamma, momentum=0.98, eplenmult=3)
