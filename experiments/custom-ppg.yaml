@@ -70,7 +70,7 @@ procgen-ppo:
         entropy_schedule: False
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
-        max_minibatch_size: 1500
+        max_minibatch_size: 1000
         updates_per_batch: 8
 
         normalize_actions: False
