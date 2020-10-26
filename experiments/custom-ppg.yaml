@@ -60,7 +60,7 @@ procgen-ppo:
         value_lr: 1.0e-3
         same_lr_everywhere: False
         aux_phase_mixed_precision: True
-        single_optimizer: False
+        single_optimizer: True
         max_time: 7200
         
         adaptive_gamma: False
