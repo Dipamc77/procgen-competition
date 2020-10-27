@@ -301,13 +301,17 @@ class CustomTorchPolicy(TorchPolicy):
         
         # Tune vf and pi heads to older predictions with (augmented?) observations
         for ep in range(retune_epochs):
+            counter = 0
             for slices in self.retune_selector.make_minibatches(replay_pi):
-                self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]))
+                counter += 1
+                apply_grad = (counter % 2) == 0
+                self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]), 
+                                 apply_grad, num_accumulate=2)
                 
         self.retunes_completed += 1
         self.retune_selector.retune_done()
  
-    def tune_policy(self, obs, target_vf, target_pi):
+    def tune_policy(self, obs, target_vf, target_pi, apply_grad, num_accumulate):
         if self.config['augment_buffer']:
             obs_aug = np.empty(obs.shape, obs.dtype)
             aug_idx = np.random.randint(self.config['augment_randint_num'], size=len(obs))
@@ -319,38 +323,42 @@ class CustomTorchPolicy(TorchPolicy):
             obs_in = self.to_tensor(obs)
         
         if not self.config['aux_phase_mixed_precision']:
-            loss, vf_loss = self._aux_calc_loss(obs_in, target_vf, target_pi)
+            loss, vf_loss = self._aux_calc_loss(obs_in, target_vf, target_pi, num_accumulate)
             loss.backward()
             vf_loss.backward()
-            if not self.config['single_optimizer']:
-                self.aux_optimizer.step()
-                self.value_optimizer.step()
-            else:
-                self.optimizer.step()
+            
+            if apply_grad:
+                if not self.config['single_optimizer']:
+                    self.aux_optimizer.step()
+                    self.value_optimizer.step()
+                else:
+                    self.optimizer.step()
                 
             
         else:
             with autocast():
-                loss, vf_loss = self._aux_calc_loss(obs_in, target_vf, target_pi)
+                loss, vf_loss = self._aux_calc_loss(obs_in, target_vf, target_pi, num_accumulate)
             
             self.amp_scaler.scale(loss).backward(retain_graph=True)
             self.amp_scaler.scale(vf_loss).backward()
+            
+            if apply_grad:
+                if not self.config['single_optimizer']:
+                    self.amp_scaler.step(self.aux_optimizer)
+                    self.amp_scaler.step(self.value_optimizer)
+                else:
+                    self.amp_scaler.step(self.optimizer)
 
+                self.amp_scaler.update()
+         
+        if apply_grad:
             if not self.config['single_optimizer']:
-                self.amp_scaler.step(self.aux_optimizer)
-                self.amp_scaler.step(self.value_optimizer)
+                self.aux_optimizer.zero_grad()
+                self.value_optimizer.zero_grad()
             else:
-                self.amp_scaler.step(self.optimizer)
-
-            self.amp_scaler.update()
+                self.optimizer.zero_grad()
             
-        if not self.config['single_optimizer']:
-            self.aux_optimizer.zero_grad()
-            self.value_optimizer.zero_grad()
-        else:
-            self.optimizer.zero_grad()
-            
-    def _aux_calc_loss(self, obs_in, target_vf, target_pi):
+    def _aux_calc_loss(self, obs_in, target_vf, target_pi, num_accumulate):
         vpred, pi_logits = self.model.vf_pi(obs_in, ret_numpy=False, no_grad=False, to_torch=False)
         aux_vpred = self.model.aux_value_function()
         aux_loss = .5 * torch.mean(torch.pow(aux_vpred - target_vf, 2))
@@ -361,6 +369,9 @@ class CustomTorchPolicy(TorchPolicy):
 
         loss = pi_loss + aux_loss
         vf_loss = .5 * torch.mean(torch.pow(vpred - target_vf, 2))
+        
+        loss = loss / num_accumulate
+        vf_loss = vf_loss / num_accumulate
         
         return loss, vf_loss
         
