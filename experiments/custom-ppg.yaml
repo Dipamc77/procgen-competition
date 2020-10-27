@@ -45,9 +45,9 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 6
-        n_pi: 10
-        num_retunes: 16
+        skips: 2
+        n_pi: 14
+        num_retunes: 12
         retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
@@ -65,7 +65,7 @@ procgen-ppo:
         pi_phase_mixed_precision: True
         
         adaptive_gamma: False
-        final_lr: 1.0e-4
+        final_lr: 5.0e-5
         lr_schedule: 'linear'
         final_entropy_coeff: 0.002
         entropy_schedule: False
