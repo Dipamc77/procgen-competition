@@ -97,6 +97,7 @@ DEFAULT_CONFIG = with_common_config({
     "aux_phase_mixed_precision": False,
     "single_optimizer": False,
     "max_time": 7200, 
+    "pi_phase_mixed_precision": False,
 })
 # __sphinx_doc_end__
 # yapf: enable

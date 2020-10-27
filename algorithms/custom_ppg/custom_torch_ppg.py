@@ -228,6 +228,48 @@ class CustomTorchPolicy(TorchPolicy):
                      ent_coef, vf_coef,
                      obs, returns, actions, values, logp_actions_old, advs):
         
+        if not self.config['pi_phase_mixed_precision']:
+            loss, vf_loss = self._calc_pi_vf_loss(apply_grad, num_accumulate, 
+                                                 cliprange, vfcliprange, max_grad_norm,
+                                                 ent_coef, vf_coef,
+                                                 obs, returns, actions, values, logp_actions_old, advs)
+
+            loss.backward()
+            vf_loss.backward()
+            if apply_grad:
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                if not self.config['single_optimizer']:
+                    self.value_optimizer.step()
+                    self.value_optimizer.zero_grad()
+        else:
+            with autocast():
+                loss, vf_loss = self._calc_pi_vf_loss(apply_grad, num_accumulate, 
+                                                 cliprange, vfcliprange, max_grad_norm,
+                                                 ent_coef, vf_coef,
+                                                 obs, returns, actions, values, logp_actions_old, advs)
+                
+            self.amp_scaler.scale(loss).backward(retain_graph=True)
+            self.amp_scaler.scale(vf_loss).backward()
+            
+            if apply_grad:
+                self.amp_scaler.step(self.optimizer)
+                if not self.config['single_optimizer']:
+                    self.amp_scaler.step(self.value_optimizer)
+                self.amp_scaler.update()
+                
+                self.optimizer.zero_grad()
+                if not self.config['single_optimizer']:
+                    self.value_optimizer.zero_grad()
+
+
+
+    
+    def _calc_pi_vf_loss(self, apply_grad, num_accumulate, 
+                         cliprange, vfcliprange, max_grad_norm,
+                         ent_coef, vf_coef,
+                         obs, returns, actions, values, logp_actions_old, advs):
+        
         vpred, pi_logits = self.model.vf_pi(obs, ret_numpy=False, no_grad=False, to_torch=False)
         pd = self.make_distr(pi_logits)
         logp_actions = pd.log_prob(actions[...,None]).squeeze(1)
@@ -244,17 +286,8 @@ class CustomTorchPolicy(TorchPolicy):
         
         loss = loss / num_accumulate
         vf_loss = vf_loss / num_accumulate
-
-        loss.backward()
-        vf_loss.backward()
-        if apply_grad:
-            self.optimizer.step()
-            self.optimizer.zero_grad()
-            if not self.config['single_optimizer']:
-                self.value_optimizer.step()
-                self.value_optimizer.zero_grad()
-
-        
+        return loss, vf_loss
+    
     def aux_train(self):
         nbatch_train = self.mem_limited_batch_size 
         retune_epochs = self.config['retune_epochs']
@@ -294,6 +327,7 @@ class CustomTorchPolicy(TorchPolicy):
                 self.value_optimizer.step()
             else:
                 self.optimizer.step()
+                
             
         else:
             with autocast():

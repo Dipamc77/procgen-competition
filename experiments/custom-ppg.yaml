@@ -62,6 +62,7 @@ procgen-ppo:
         aux_phase_mixed_precision: True
         single_optimizer: True
         max_time: 7200
+        pi_phase_mixed_precision: True
         
         adaptive_gamma: False
         final_lr: 5.0e-5
