@@ -45,12 +45,13 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 6
-        n_pi: 10
+        skips: 0
+        n_pi: 16
         num_retunes: 16
         retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
+        aux_num_accumulates: 3
         augment_buffer: True
         scale_reward: 1.0
         reset_returns: False
@@ -62,7 +63,7 @@ procgen-ppo:
         aux_phase_mixed_precision: True
         single_optimizer: True
         max_time: 7200
-        pi_phase_mixed_precision: True
+        pi_phase_mixed_precision: False
         
         adaptive_gamma: False
         final_lr: 1.0e-4
@@ -71,7 +72,7 @@ procgen-ppo:
         entropy_schedule: False
         
         # Memory management, if batch size overflow, batch splitting is done to handle it
-        max_minibatch_size: 500
+        max_minibatch_size: 1000
         updates_per_batch: 8
 
         normalize_actions: False
@@ -88,10 +89,10 @@ procgen-ppo:
         model:
             custom_model: impala_torch_ppg
             custom_model_config:
-#                 depths: [32, 64, 64]
-#                 nlatents: 512
-                depths: [64, 128, 128]
-                nlatents: 1024
+                depths: [32, 64, 64]
+                nlatents: 512
+#                 depths: [64, 128, 128]
+#                 nlatents: 1024
                 init_normed: True
                 use_layernorm: False
                 diff_framestack: True

@@ -144,7 +144,7 @@ class RetuneSelector:
         self.replay_index = 0
         
         
-    def make_minibatches(self, presleep_pi, num_rollouts=4):
+    def make_minibatches(self, presleep_pi, num_rollouts):
             if not self.flat_buffer:
                 env_segs = list(itertools.product(range(self.n_pi), range(self.nenvs)))
                 np.random.shuffle(env_segs)

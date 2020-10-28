@@ -206,7 +206,7 @@ class CustomTorchPolicy(TorchPolicy):
                 apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 self._batch_train(apply_grad, self.accumulate_train_batches,
                                   cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
-
+                
         ## Distill with aux head
         should_retune = self.retune_selector.update(unroll(obs, ts), mb_returns)
         if should_retune:
@@ -300,14 +300,15 @@ class CustomTorchPolicy(TorchPolicy):
                                                              ret_numpy=True, no_grad=True, to_torch=True)
         
         # Tune vf and pi heads to older predictions with (augmented?) observations
+        num_accumulate = self.config['aux_num_accumulates']
+        num_rollouts = self.config['aux_mbsize']
         for ep in range(retune_epochs):
             counter = 0
-            for slices in self.retune_selector.make_minibatches(replay_pi):
+            for slices in self.retune_selector.make_minibatches(replay_pi, num_rollouts):
                 counter += 1
-                apply_grad = (counter % 2) == 0
+                apply_grad = (counter % num_accumulate) == 0
                 self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]), 
-                                 apply_grad, num_accumulate=2)
-                
+                                 apply_grad, num_accumulate)
         self.retunes_completed += 1
         self.retune_selector.retune_done()
  
