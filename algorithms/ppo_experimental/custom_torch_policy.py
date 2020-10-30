@@ -171,7 +171,7 @@ class CustomTorchPolicy(TorchPolicy):
         max_grad_norm = self.config['grad_clip']
         ent_coef, vf_coef = self.ent_coef, self.config['vf_loss_coeff']
         
-        vf_coef *= self.timesteps_total / self.target_timesteps
+        vf_coef_now = vf_coef * self.timesteps_total / self.target_timesteps
         
         neglogpacs = -samples['action_logp'] ## np.isclose seems to be True always, otherwise compute again if needed
         noptepochs = self.config['num_sgd_iter']
@@ -197,7 +197,7 @@ class CustomTorchPolicy(TorchPolicy):
                 optim_count += 1
                 apply_grad = (optim_count % self.accumulate_train_batches) == 0
                 self._batch_train(apply_grad, self.accumulate_train_batches,
-                                  lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
+                                  lrnow, cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef_now, *slices)
         
         ## Distill with augmentation
         should_retune = self.retune_selector.update(obs, self.exp_replay)
@@ -241,18 +241,20 @@ class CustomTorchPolicy(TorchPolicy):
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
         loss = loss / num_accumulate
         
-        latent = self.model._detached_latent
-        det_value = self.model.value_fc(latent).squeeze(1)
-        det_value_loss = .5 * torch.pow((det_value - returns), 2).mean()
-        
         # Weird hack to remove vf_loss grad and only keep det_value_loss grad
         if self.model.value_fc.weight.grad is not None:
             self.value_fc_old_grads = [self.model.value_fc.weight.grad.clone(), self.model.value_fc.bias.grad.clone()]
         else:
             self.value_fc_old_grads = None
         loss.backward()
+        
         self.model.value_fc.zero_grad() 
+        
+        latent = self.model._detached_latent
+        det_value = self.model.value_fc(latent).squeeze(1)
+        det_value_loss = .5 * torch.pow((det_value - returns), 2).mean()
         det_value_loss.backward()
+        
         if self.value_fc_old_grads is not None:
             self.model.value_fc.weight.grad += self.value_fc_old_grads[0]
             self.model.value_fc.bias.grad += self.value_fc_old_grads[1]
