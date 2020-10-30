@@ -1,6 +1,6 @@
 procgen-ppo:
     env: frame_stacked_procgen
-    run: CustomTorchPPGAgent
+    run: PPGExperimental
     disable_evaluation_worker: True
     # === Stop Conditions ===
     stop:
@@ -45,9 +45,9 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 2
-        n_pi: 16
-        num_retunes: 15
+        skips: 0
+        n_pi: 1
+        num_retunes: 14
         retune_epochs: 7
         standardize_rewards: True
         aux_mbsize: 4
@@ -64,7 +64,6 @@ procgen-ppo:
         single_optimizer: False
         max_time: 7200
         pi_phase_mixed_precision: False
-        l2_reg: 3.0e-5
         
         adaptive_gamma: False
         final_lr: 5.0e-5

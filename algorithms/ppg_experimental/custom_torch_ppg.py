@@ -58,11 +58,11 @@ class CustomTorchPolicy(TorchPolicy):
         aux_optim_params = list(network_params - value_params)
         ppo_optim_params = list(network_params - aux_params - value_params)
         if not self.config['single_optimizer']:
-            self.optimizer = torch.optim.Adam(ppo_optim_params, lr=self.config['lr'], weight_decay=self.config['l2_reg'])
+            self.optimizer = torch.optim.Adam(ppo_optim_params, lr=self.config['lr'])
         else:
-            self.optimizer = torch.optim.Adam(network_params, lr=self.config['lr'], weight_decay=self.config['l2_reg'])
-        self.aux_optimizer = torch.optim.Adam(aux_optim_params, lr=self.config['aux_lr'], weight_decay=self.config['l2_reg'])
-        self.value_optimizer = torch.optim.Adam(value_params, lr=self.config['value_lr'], weight_decay=self.config['l2_reg'])
+            self.optimizer = torch.optim.Adam(network_params, lr=self.config['lr'])
+        self.aux_optimizer = torch.optim.Adam(aux_optim_params, lr=self.config['aux_lr'])
+        self.value_optimizer = torch.optim.Adam(value_params, lr=self.config['value_lr'])
         self.max_reward = self.config['env_config']['return_max']
         self.rewnorm = RewardNormalizer(cliprew=self.max_reward) ## TODO: Might need to go to custom state
         self.reward_deque = deque(maxlen=100)
@@ -165,21 +165,10 @@ class CustomTorchPolicy(TorchPolicy):
         last_values, _ = self.model.vf_pi(next_obs, ret_numpy=True, no_grad=True, to_torch=True)
         values = samples['values']
         
-        ## GAE
         mb_values = unroll(values, ts)
-        mb_returns = np.zeros_like(mb_rewards)
-        mb_advs = np.zeros_like(mb_rewards)
-        lastgaelam = 0
-        for t in reversed(range(nsteps)):
-            if t == nsteps - 1:
-                nextvalues = last_values
-            else:
-                nextvalues = mb_values[t+1]
-            nextnonterminal = 1.0 - mb_dones[t]
-            delta = mb_rewards[t] + gamma * nextvalues * nextnonterminal - mb_values[t]
-            mb_advs[t] = lastgaelam = delta + gamma * lam * nextnonterminal * lastgaelam
-        mb_returns = mb_advs + mb_values
-        
+        mb_returns, mb_advs = calculate_gae(mb_values, mb_dones, mb_rewards, last_values, gamma, lam)
+        self.last_values = last_values
+            
         ## Data from config
         cliprange, vfcliprange = self.config['clip_param'], self.config['vf_clip_param']
         max_grad_norm = self.config['grad_clip']
@@ -208,7 +197,7 @@ class CustomTorchPolicy(TorchPolicy):
                                   cliprange, vfcliprange, max_grad_norm, ent_coef, vf_coef, *slices)
                 
         ## Distill with aux head
-        should_retune = self.retune_selector.update(unroll(obs, ts), mb_returns)
+        should_retune = self.retune_selector.update(unroll(obs, ts), mb_dones, mb_rewards)
         if should_retune:
             self.aux_train()
         
@@ -291,20 +280,28 @@ class CustomTorchPolicy(TorchPolicy):
     def aux_train(self):
         nbatch_train = self.mem_limited_batch_size 
         retune_epochs = self.config['retune_epochs']
-        replay_shape = self.retune_selector.vtarg_replay.shape
+        replay_shape = self.retune_selector.replay_shape
         replay_pi = np.empty((*replay_shape, self.retune_selector.ac_space.n), dtype=np.float32)
+        replay_vf = np.empty((*replay_shape,), dtype=np.float32)
 
         for nnpi in range(self.retune_selector.n_pi):
             for ne in range(self.retune_selector.nenvs):
-                _, replay_pi[nnpi, :, ne] = self.model.vf_pi(self.retune_selector.exp_replay[nnpi, :, ne], 
-                                                             ret_numpy=True, no_grad=True, to_torch=True)
+                import pdb; pdb.set_trace()
+                replay_vf[nnpi, :, ne], replay_pi[nnpi, :, ne] = self.model.vf_pi(self.retune_selector.exp_replay[nnpi, :, ne], 
+                                                                         ret_numpy=True, no_grad=True, to_torch=True)
+        
+        gamma, lam = self.gamma, self.config['lambda']
+        new_returns = calculate_gae_buffer(replay_vf, 
+                                           self.retune_selector.dones_replay,
+                                           self.retune_selector.rewards_replay, 
+                                           self.last_values, gamma, lam)
         
         # Tune vf and pi heads to older predictions with (augmented?) observations
         num_accumulate = self.config['aux_num_accumulates']
         num_rollouts = self.config['aux_mbsize']
         for ep in range(retune_epochs):
             counter = 0
-            for slices in self.retune_selector.make_minibatches(replay_pi, num_rollouts):
+            for slices in self.retune_selector.make_minibatches(replay_pi, returns_buffer, num_rollouts):
                 counter += 1
                 apply_grad = (counter % num_accumulate) == 0
                 self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]), 

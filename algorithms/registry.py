@@ -37,6 +37,9 @@ def _import_ppo_experimental():
     from .ppo_experimental.ppo import PPOTrainer
     return PPOTrainer
 
+def _import_ppg_experimental():
+    from .ppg_experimental.ppg import PPGTrainer
+    return PPGTrainer
 
 
 CUSTOM_ALGORITHMS = {
@@ -46,5 +49,6 @@ CUSTOM_ALGORITHMS = {
     "CustomTorchPPOAgent": _import_custom_torch_agent,
     "CustomTorchPPGAgent": _import_custom_torch_ppg,
     "PPOExperimental": _import_ppo_experimental,
+    "PPGExperimental": _import_ppg_experimental,
 }
 

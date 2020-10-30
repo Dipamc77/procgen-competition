@@ -99,13 +99,12 @@ DEFAULT_CONFIG = with_common_config({
     "max_time": 7200, 
     "pi_phase_mixed_precision": False,
     "aux_num_accumulates": 1,
-    "l2_reg": 0.0,
 })
 # __sphinx_doc_end__
 # yapf: enable
 
 
 PPGTrainer = build_trainer(
-    name="CustomTorchPPGAgent",
+    name="PPGExperimentalAgent",
     default_config=DEFAULT_CONFIG,
     default_policy=CustomTorchPolicy)
