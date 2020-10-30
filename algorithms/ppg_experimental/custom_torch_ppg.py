@@ -286,7 +286,6 @@ class CustomTorchPolicy(TorchPolicy):
 
         for nnpi in range(self.retune_selector.n_pi):
             for ne in range(self.retune_selector.nenvs):
-                import pdb; pdb.set_trace()
                 replay_vf[nnpi, :, ne], replay_pi[nnpi, :, ne] = self.model.vf_pi(self.retune_selector.exp_replay[nnpi, :, ne], 
                                                                          ret_numpy=True, no_grad=True, to_torch=True)
         
@@ -301,7 +300,7 @@ class CustomTorchPolicy(TorchPolicy):
         num_rollouts = self.config['aux_mbsize']
         for ep in range(retune_epochs):
             counter = 0
-            for slices in self.retune_selector.make_minibatches(replay_pi, returns_buffer, num_rollouts):
+            for slices in self.retune_selector.make_minibatches(replay_pi, new_returns, num_rollouts):
                 counter += 1
                 apply_grad = (counter % num_accumulate) == 0
                 self.tune_policy(slices[0], self.to_tensor(slices[1]), self.to_tensor(slices[2]), 
