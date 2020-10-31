@@ -45,10 +45,10 @@ procgen-ppo:
         no_done_at_end: False
         
         # Custom switches
-        skips: 2
-        n_pi: 16
-        num_retunes: 15
-        retune_epochs: 7
+        skips: 0
+        n_pi: 32
+        num_retunes: 8
+        retune_epochs: 6
         standardize_rewards: True
         aux_mbsize: 4
         aux_num_accumulates: 2
@@ -112,6 +112,11 @@ procgen-ppo:
         explore: True,
         exploration_config:
             type: "StochasticSampling"
+            
+        evaluation_config:
+            exploration_config:
+                type: SoftQ
+                temperature: 0.5
 
         observation_filter: "NoFilter"
         synchronize_filters: True

@@ -225,8 +225,6 @@ class CustomTorchPolicy(TorchPolicy):
         loss.backward()
         vf_loss.backward()
         if apply_grad:
-            if self.config['grad_clip'] is not None:
-                nn.utils.clip_grad_norm_(self.model.parameters(), self.config['grad_clip'])
             self.optimizer.step()
             self.optimizer.zero_grad()
             if not self.config['single_optimizer']:
@@ -365,9 +363,10 @@ class CustomTorchPolicy(TorchPolicy):
             self.best_rew_tsteps = self.timesteps_total
            
         if self.timesteps_total > self.target_timesteps or (self.time_elapsed + self.buffer_time) > self.max_time:
-            if self.best_weights is not None:
-                self.set_model_weights(self.best_weights)
-                return True
+            if self.timesteps_total > 1_000_000: # Adding this hack due to maze reward deque very high in beginning
+                if self.best_weights is not None:
+                    self.set_model_weights(self.best_weights)
+                    return True
             
         return False
     
